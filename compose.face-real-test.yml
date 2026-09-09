@@ -1,0 +1,9 @@
+services:
+  face-scanner:
+    environment:
+      APP_ENV: homologation
+      FACE_VERIFICATION_PROVIDER: internal
+      # Thresholds fornecidos pelo operador para homologação técnica.
+      # Perfil pretendido: FMR alvo 0.001. Não promover para produção sem validação formal.
+      FACE_REVIEW_THRESHOLD: "0.363"
+      FACE_MATCH_THRESHOLD: "0.500"

@@ -1,0 +1,30 @@
+{
+    email {$ACME_EMAIL}
+    admin off
+}
+
+(common_headers) {
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+
+{$HUB_DOMAIN} {
+    import common_headers
+    encode zstd gzip
+    reverse_proxy hub-core:80
+}
+
+{$TOTEM_DOMAIN} {
+    import common_headers
+    encode zstd gzip
+    reverse_proxy totem-api:3080
+}
+
+{$FACE_SCANNER_DOMAIN} {
+    import common_headers
+    reverse_proxy face-scanner:8091
+}

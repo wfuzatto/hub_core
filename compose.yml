@@ -1,0 +1,186 @@
+name: ${STACK_NAME:-hub_core}
+
+x-default-logging: &default-logging
+  driver: local
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  gateway:
+    image: ${CADDY_IMAGE:-caddy:2.11.4-alpine}
+    profiles: ["docker-edge"]
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8.4.11}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      TZ: ${TZ:-America/Sao_Paulo}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+    expose:
+      - "3306"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 1m
+    logging: *default-logging
+
+  hub-core:
+    build:
+      context: ./services/hub-core
+    restart: unless-stopped
+    init: true
+    env_file: .env
+    environment:
+      APP_ENV: production
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_DATABASE: ${MYSQL_DATABASE}
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: ${TZ:-America/Sao_Paulo}
+    expose:
+      - "80"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "php", "-r", "$$c=@file_get_contents('http://127.0.0.1/health.php'); exit($$c===false?1:0);"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  totem-api:
+    build:
+      context: ./modules/totem_autoatendimento
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3080
+      ADMIN_PASSWORD: ${TOTEM_ADMIN_PASSWORD}
+      DATA_DIR: /app/data
+      UPLOAD_DIR: /app/data/uploads
+      BRANDING_DIR: /app/data/branding
+      PRINT_JOB_DIR: /app/data/print-jobs
+      FACE_SCANNER_URL: http://face-scanner:8091
+      FACE_SCANNER_API_KEY: ${FACE_SCANNER_API_KEY}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - totem_data:/app/data
+    expose:
+      - "3080"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  face-scanner:
+    build:
+      context: ./modules/face_scanner
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8091
+      API_KEY: ${FACE_SCANNER_API_KEY}
+      MAX_UPLOAD_MB: ${FACE_SCANNER_MAX_UPLOAD_MB:-10}
+      MIN_BLUR_SCORE: ${FACE_SCANNER_MIN_BLUR_SCORE:-30}
+      SESSION_DB_PATH: /app/data/face_scanner.sqlite3
+      ALLOWED_ORIGINS: https://${TOTEM_DOMAIN}
+      DEBUG_STORE_IMAGES: "false"
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - face_scanner_data:/app/data
+    expose:
+      - "8091"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/api/v1/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  backup-helper:
+    image: alpine:3.23
+    profiles: ["tools"]
+    command: ["sh", "-c", "echo backup-helper-ready"]
+    volumes:
+      - totem_data:/source/totem:ro
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+networks:
+  edge:
+  backend:
+
+volumes:
+  caddy_data:
+  caddy_config:
+  mysql_data:
+  totem_data:
+  face_scanner_data:

@@ -1,0 +1,9 @@
+services:
+  # Override exclusivo para homologação da interface biométrica.
+  # Não realiza comparação real de identidade: o provider mock devolve
+  # estados sintéticos para exercitar o fluxo do Totem.
+  face-scanner:
+    environment:
+      APP_ENV: homologation
+      FACE_VERIFICATION_PROVIDER: mock
+      FACE_MOCK_STATUS: ${FACE_MOCK_STATUS:-match}

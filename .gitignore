@@ -1,0 +1,8 @@
+.env
+backups/
+offline-bundles/
+modules/*
+!modules/modules.list
+!modules/.gitkeep
+*.log
+.DS_Store
