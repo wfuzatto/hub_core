@@ -22,6 +22,7 @@ command -v caddy >/dev/null 2>&1 || fail "Caddy não encontrado no host"
 HUB_PORT="${HUB_LOCAL_PORT:-$(get_env HUB_LOCAL_PORT)}"; HUB_PORT="${HUB_PORT:-3083}"
 PMS_PORT="${PMS_LOCAL_PORT:-$(get_env PMS_LOCAL_PORT)}"; PMS_PORT="${PMS_PORT:-3084}"
 TOTEM_PORT="${TOTEM_LOCAL_PORT:-$(get_env TOTEM_LOCAL_PORT)}"; TOTEM_PORT="${TOTEM_PORT:-3080}"
+FOOD_PORT="${TOTEM_FOOD_LOCAL_PORT:-$(get_env TOTEM_FOOD_LOCAL_PORT)}"; FOOD_PORT="${FOOD_PORT:-3085}"
 FACE_PORT="8092"
 PUBLIC_HOST="$(get_env PMS_PUBLIC_HOST)"; PUBLIC_HOST="${PUBLIC_HOST:-192.168.51.135}"
 BASE_URL="https://${PUBLIC_HOST}"
@@ -30,8 +31,9 @@ log "Validando pontes locais antes do cutover"
 curl -fsS "http://127.0.0.1:${HUB_PORT}/health.php" >/dev/null || fail "HUB não respondeu em 127.0.0.1:${HUB_PORT}"
 curl -fsS "http://127.0.0.1:${PMS_PORT}/health.php" >/dev/null || fail "PMS não respondeu em 127.0.0.1:${PMS_PORT}"
 curl -fsS "http://127.0.0.1:${TOTEM_PORT}/api/health" >/dev/null || fail "Totem não respondeu em 127.0.0.1:${TOTEM_PORT}"
+curl -fsS "http://127.0.0.1:${FOOD_PORT}/api/health" >/dev/null || fail "Totem Food não respondeu em 127.0.0.1:${FOOD_PORT}"
 curl -fsS "http://127.0.0.1:${FACE_PORT}/api/v1/health" >/dev/null || fail "Face Scanner não respondeu em 127.0.0.1:${FACE_PORT}"
-echo "HUB/PMS/Totem/Face locais: OK"
+echo "HUB/PMS/Totem/Totem Food/Face locais: OK"
 
 CADDYFILE="/etc/caddy/Caddyfile"
 STAMP="$(date +%Y%m%d_%H%M%S)"
@@ -39,7 +41,7 @@ BACKUP="/etc/caddy/Caddyfile.hub_core_modules_${STAMP}.bak"
 cp -a "$CADDYFILE" "$BACKUP"
 echo "Backup do Caddy: $BACKUP"
 
-export CADDYFILE HUB_PORT PMS_PORT TOTEM_PORT FACE_PORT
+export CADDYFILE HUB_PORT PMS_PORT TOTEM_PORT FOOD_PORT FACE_PORT
 python3 <<'PY'
 import os
 import re
@@ -49,6 +51,7 @@ path = Path(os.environ['CADDYFILE'])
 hub = os.environ['HUB_PORT']
 pms = os.environ['PMS_PORT']
 totem = os.environ['TOTEM_PORT']
+food = os.environ['FOOD_PORT']
 face = os.environ['FACE_PORT']
 text = path.read_text(encoding='utf-8')
 
@@ -67,6 +70,13 @@ def block(indent: str) -> str:
 {i}    handle_path /totem/* {{
 {i}        reverse_proxy 127.0.0.1:{totem} {{
 {i}            header_up X-Forwarded-Prefix /totem
+{i}        }}
+{i}    }}
+
+{i}    redir /food /food/ 308
+{i}    handle_path /food/* {{
+{i}        reverse_proxy 127.0.0.1:{food} {{
+{i}            header_up X-Forwarded-Prefix /food
 {i}        }}
 {i}    }}
 
@@ -131,20 +141,25 @@ log "Testando URLs públicas, APIs e assets"
 HUB_CODE="$(curl -kLsS -o /tmp/hub_core_public.$$ -w '%{http_code}' "${BASE_URL}/")"
 PMS_RESULT="$(curl -kLsS -o /tmp/hub_core_pms.$$ -w '%{http_code}|%{url_effective}' "${BASE_URL}/pms/")"
 TOTEM_CODE="$(curl -kLsS -o /tmp/hub_core_totem.$$ -w '%{http_code}' "${BASE_URL}/totem/")"
+FOOD_CODE="$(curl -kLsS -o /tmp/hub_core_food.$$ -w '%{http_code}' "${BASE_URL}/food/")"
 FACE_UI_RESULT="$(curl -kLsS -o /tmp/hub_core_face_ui.$$ -w '%{http_code}|%{url_effective}' "${BASE_URL}/face-scanner/")"
 TOTEM_HEALTH="$(curl -kfsS "${BASE_URL}/totem/api/health")"
+FOOD_HEALTH="$(curl -kfsS "${BASE_URL}/food/api/health")"
 TOTEM_CONFIG="$(curl -kfsS "${BASE_URL}/totem/api/config")"
 FACE_HEALTH="$(curl -kfsS "${BASE_URL}/face-scanner/api/v1/health")"
-trap 'rm -f /tmp/hub_core_public.$$ /tmp/hub_core_pms.$$ /tmp/hub_core_totem.$$ /tmp/hub_core_face_ui.$$' EXIT
+trap 'rm -f /tmp/hub_core_public.$$ /tmp/hub_core_pms.$$ /tmp/hub_core_totem.$$ /tmp/hub_core_food.$$ /tmp/hub_core_face_ui.$$' EXIT
 
 curl -kfsS "${BASE_URL}/totem/styles.css" >/dev/null || fail "CSS do Totem não carregou"
 curl -kfsS "${BASE_URL}/totem/app.js" >/dev/null || fail "JavaScript do Totem não carregou"
+curl -kfsS "${BASE_URL}/food/styles.css" >/dev/null || fail "CSS do Totem Food não carregou"
+curl -kfsS "${BASE_URL}/food/app.js" >/dev/null || fail "JavaScript do Totem Food não carregou"
 curl -kfsS "${BASE_URL}/face-scanner/static/styles.css?v=0.3.3" >/dev/null || fail "CSS do Face Scanner não carregou"
 curl -kfsS "${BASE_URL}/face-scanner/static/app.js?v=0.3.3" >/dev/null || fail "JavaScript do Face Scanner não carregou"
 
 [[ "$HUB_CODE" == "200" ]] || fail "HUB público respondeu HTTP $HUB_CODE"
 [[ "${PMS_RESULT%%|*}" == "200" ]] || fail "PMS público respondeu ${PMS_RESULT%%|*}"
 [[ "$TOTEM_CODE" == "200" ]] || fail "Totem público respondeu HTTP $TOTEM_CODE"
+[[ "$FOOD_CODE" == "200" ]] || fail "Totem Food público respondeu HTTP $FOOD_CODE"
 [[ "${FACE_UI_RESULT%%|*}" == "200" ]] || fail "Tela pública do Face respondeu ${FACE_UI_RESULT%%|*}"
 [[ "${FACE_UI_RESULT#*|}" == *"/totem/face-scanner-test.html"* ]] || fail "Face Scanner não abriu a tela rica de homologação do Totem"
 grep -q '/totem/' /tmp/hub_core_totem.$$ || fail "Totem respondeu 200, mas os assets não estão prefixados com /totem/"
@@ -153,14 +168,17 @@ grep -q 'Rostos detectados' /tmp/hub_core_face_ui.$$ || fail "Tela rica do Face 
 echo "HUB:          ${BASE_URL}/ -> HTTP $HUB_CODE"
 echo "PMS:          ${BASE_URL}/pms/ -> ${PMS_RESULT#*|}"
 echo "Totem:        ${BASE_URL}/totem/ -> HTTP $TOTEM_CODE"
+echo "Totem Food:   ${BASE_URL}/food/ -> HTTP $FOOD_CODE"
 echo "Face UI:      ${FACE_UI_RESULT#*|}"
 echo "Totem health: $TOTEM_HEALTH"
+echo "Food health:  $FOOD_HEALTH"
 echo "Totem config: OK"
 echo "Face health:  $FACE_HEALTH"
-echo "Assets Totem/Face: OK"
+echo "Assets:       OK"
 echo
 echo "PUBLICAÇÃO POR MÓDULOS CONCLUÍDA"
 echo "  ${BASE_URL}/"
 echo "  ${BASE_URL}/pms/"
 echo "  ${BASE_URL}/totem/"
+echo "  ${BASE_URL}/food/"
 echo "  ${BASE_URL}/face-scanner/"
