@@ -31,6 +31,13 @@
             }
         }
 
+        redir /food /food/ 308
+        handle_path /food/* {
+            reverse_proxy totem-food:3088 {
+                header_up X-Forwarded-Prefix /food
+            }
+        }
+
         # A raiz pública do Face Scanner abre a tela rica de homologação do Totem,
         # que exibe os rostos detectados/alinhados ao final. As rotas técnicas
         # /face-scanner/api/* e /face-scanner/static/* continuam indo diretamente
