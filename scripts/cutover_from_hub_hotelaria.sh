@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 NEW_ROOT="${NEW_ROOT:-/home/luisnasc/hub_core}"
 OLD_PROJECT="${OLD_PROJECT:-hub-hotelaria}"
 NEW_PROJECT="${NEW_PROJECT:-hub_core}"
 BACKUP_DIR="${BACKUP_DIR:-/home/luisnasc/backups/hub_core_migration_20260909_162248}"
-EXPECTED_COMMIT_PREFIX="${EXPECTED_COMMIT_PREFIX:-b09e99d}"
 
 log(){ printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
-fail(){ echo "ERRO: $*" >&2; exit 1; }
+fail(){ echo "ERRO: $*" >&2; return 1; }
 
 require_cmd(){ command -v "$1" >/dev/null 2>&1 || fail "comando ausente: $1"; }
-for c in docker git awk grep sed tar; do require_cmd "$c"; done
+for c in docker git awk grep sed tar curl sha256sum; do require_cmd "$c"; done
 
 docker compose version >/dev/null 2>&1 || fail "Docker Compose v2 não disponível"
 docker info >/dev/null 2>&1 || fail "Docker daemon não acessível"
@@ -21,14 +20,12 @@ docker info >/dev/null 2>&1 || fail "Docker daemon não acessível"
 cd "$NEW_ROOT"
 
 log "Validando Git do hub_core"
-HEAD_SHA="$(git rev-parse HEAD)"
-[[ "$HEAD_SHA" == ${EXPECTED_COMMIT_PREFIX}* ]] || fail "HEAD inesperado: $HEAD_SHA"
 git diff --quiet || fail "working tree possui alterações"
 git diff --cached --quiet || fail "há alterações staged"
-
-git fetch origin main >/dev/null 2>&1 || fail "git fetch falhou; valide autenticação SSH"
+git fetch origin main >/dev/null 2>&1 || fail "git fetch falhou; valide autenticação SSH/ssh-agent"
+HEAD_SHA="$(git rev-parse HEAD)"
 REMOTE_SHA="$(git rev-parse origin/main)"
-[[ "$HEAD_SHA" == "$REMOTE_SHA" ]] || fail "HEAD ($HEAD_SHA) diferente de origin/main ($REMOTE_SHA)"
+[[ "$HEAD_SHA" == "$REMOTE_SHA" ]] || fail "HEAD ($HEAD_SHA) diferente de origin/main ($REMOTE_SHA); faça git pull --ff-only origin main"
 
 log "Localizando containers antigos"
 OLD_MYSQL_CID="$(docker ps -aq --filter "name=^/${OLD_PROJECT}-mysql-1$")"
@@ -67,11 +64,9 @@ volume_for(){
 OLD_MYSQL_VOLUME="$(volume_for "$OLD_MYSQL_CID" /var/lib/mysql)"
 OLD_TOTEM_VOLUME="$(volume_for "$OLD_TOTEM_CID" /app/data)"
 OLD_FACE_VOLUME="$(volume_for "$OLD_FACE_CID" /app/data)"
-
 [[ -n "$OLD_MYSQL_VOLUME" ]] || fail "volume MySQL antigo não encontrado"
 [[ -n "$OLD_TOTEM_VOLUME" ]] || fail "volume Totem antigo não encontrado"
 [[ -n "$OLD_FACE_VOLUME" ]] || fail "volume Face antigo não encontrado"
-
 printf 'MySQL antigo: %s\nTotem antigo: %s\nFace antigo: %s\n' "$OLD_MYSQL_VOLUME" "$OLD_TOTEM_VOLUME" "$OLD_FACE_VOLUME"
 
 log "Validando Compose novo"
@@ -86,7 +81,7 @@ for v in "$NEW_MYSQL_VOLUME" "$NEW_TOTEM_VOLUME" "$NEW_FACE_VOLUME"; do
   if ! docker volume inspect "$v" >/dev/null 2>&1; then
     docker volume create "$v" >/dev/null
   fi
-  count="$(docker run --rm -v "$v:/v:ro" alpine:3.23 sh -c 'find /v -mindepth 1 -maxdepth 1 | wc -l')"
+  count="$(docker run --rm -v "$v:/v:ro" alpine:3.23 sh -c 'find /v -mindepth 1 | head -n 1 | wc -l')"
   [[ "$count" == "0" ]] || fail "volume novo não está vazio: $v"
 done
 
@@ -100,7 +95,31 @@ fi
 
 df -h "$NEW_ROOT"
 
+CUTOVER_STARTED=0
+ROLLBACK_RUNNING=0
+rollback(){
+  local rc="${1:-1}"
+  [[ "$ROLLBACK_RUNNING" == "0" ]] || exit "$rc"
+  ROLLBACK_RUNNING=1
+  trap - ERR
+  if [[ "$CUTOVER_STARTED" == "1" ]]; then
+    log "ROLLBACK: parando hub_core e reativando stack antigo"
+    (cd "$NEW_ROOT" && "${NEW_COMPOSE[@]}" stop) || true
+    (cd "$OLD_WORKDIR" && "${OLD_COMPOSE[@]}" start) || true
+    sleep 8
+    docker ps --filter "name=${OLD_PROJECT}" || true
+  fi
+  exit "$rc"
+}
+on_error(){
+  rc=$?
+  echo "Falha durante cutover (rc=$rc)." >&2
+  rollback "$rc"
+}
+trap on_error ERR
+
 log "Parando stack antigo de forma controlada"
+CUTOVER_STARTED=1
 (cd "$OLD_WORKDIR" && "${OLD_COMPOSE[@]}" stop)
 
 for cid in "$OLD_MYSQL_CID" "$OLD_HUB_CID" "$OLD_TOTEM_CID" "$OLD_FACE_CID"; do
@@ -117,6 +136,7 @@ copy_volume(){
     alpine:3.23 \
     sh -c 'set -e; cd /from; tar cpf - . | tar xpf - -C /to'
 
+  local src_kb dst_kb src_files dst_files
   src_kb="$(docker run --rm -v "$src:/v:ro" alpine:3.23 sh -c "du -sk /v | awk '{print \$1}'")"
   dst_kb="$(docker run --rm -v "$dst:/v:ro" alpine:3.23 sh -c "du -sk /v | awk '{print \$1}'")"
   src_files="$(docker run --rm -v "$src:/v:ro" alpine:3.23 sh -c 'find /v -type f | wc -l')"
@@ -124,21 +144,13 @@ copy_volume(){
   echo "  size_kb: $src_kb -> $dst_kb"
   echo "  files:   $src_files -> $dst_files"
   [[ "$src_files" == "$dst_files" ]] || fail "divergência na quantidade de arquivos $src -> $dst"
+  # Aceita pequena diferença de blocos por filesystem, mas não volume destino vazio.
+  [[ "$dst_kb" -gt 0 ]] || fail "volume destino ficou vazio: $dst"
 }
 
 copy_volume "$OLD_MYSQL_VOLUME" "$NEW_MYSQL_VOLUME"
 copy_volume "$OLD_TOTEM_VOLUME" "$NEW_TOTEM_VOLUME"
 copy_volume "$OLD_FACE_VOLUME" "$NEW_FACE_VOLUME"
-
-rollback(){
-  log "ROLLBACK: parando hub_core e reativando stack antigo"
-  (cd "$NEW_ROOT" && "${NEW_COMPOSE[@]}" stop) || true
-  (cd "$OLD_WORKDIR" && "${OLD_COMPOSE[@]}" start) || true
-  sleep 8
-  docker ps --filter "name=${OLD_PROJECT}"
-  exit 1
-}
-trap 'echo "Falha durante cutover." >&2; rollback' ERR
 
 log "Executando preflight novo"
 EDGE_MODE=host USE_GPU=0 ./scripts/preflight.sh
@@ -166,9 +178,10 @@ log "Logs recentes"
 for svc in mysql hub-core totem-api face-scanner; do
   echo "===== $svc ====="
   "${NEW_COMPOSE[@]}" logs --tail=80 "$svc" | tail -80
- done
+done
 
 trap - ERR
+CUTOVER_STARTED=0
 
 log "CUTOVER CONCLUÍDO"
 echo "Git:          $HEAD_SHA"
