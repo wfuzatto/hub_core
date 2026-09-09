@@ -1,0 +1,10 @@
+# Override temporário para homologação do dashboard standalone do Face Scanner.
+# Uso:
+#   docker compose -f compose.yml -f compose.host-edge.yml -f compose.face-test.yml up -d --force-recreate face-scanner
+#
+# Não usar em produção. Para desabilitar, recrie o serviço sem este override
+# (por exemplo, executando scripts/update_docker.sh).
+services:
+  face-scanner:
+    environment:
+      DASHBOARD_UNAUTHENTICATED: "true"
