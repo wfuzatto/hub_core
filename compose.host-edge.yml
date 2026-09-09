@@ -13,12 +13,13 @@ services:
     ports:
       - "${TOTEM_LOCAL_BIND:-127.0.0.1}:${TOTEM_LOCAL_PORT:-3080}:3080"
 
-  # Publica o Face Scanner para testes independentes na rede local.
-  # O provider mock abaixo é EXCLUSIVO de homologação: ele não compara identidades.
+  # Face Scanner permanece em homologação, mas sua ponte para o Caddy do host
+  # fica restrita a loopback. A comunicação Totem -> Face usa face-scanner:8091
+  # diretamente na rede Docker backend.
   face-scanner:
     environment:
       APP_ENV: homologation
       FACE_VERIFICATION_PROVIDER: mock
       FACE_MOCK_STATUS: ${FACE_MOCK_STATUS:-match}
     ports:
-      - "0.0.0.0:8092:8091"
+      - "127.0.0.1:8092:8091"
