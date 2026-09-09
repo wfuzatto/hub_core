@@ -95,6 +95,36 @@ services:
     stop_grace_period: 30s
     logging: *default-logging
 
+  pms:
+    build:
+      context: ./modules/hotelaria
+    restart: unless-stopped
+    init: true
+    environment:
+      APP_ENV: production
+      DB_HOST: ${PMS_DB_HOST:?configure PMS_DB_HOST in .env}
+      DB_PORT: ${PMS_DB_PORT:-3306}
+      DB_NAME: ${PMS_DB_NAME:?configure PMS_DB_NAME in .env}
+      DB_USER: ${PMS_DB_USER:?configure PMS_DB_USER in .env}
+      DB_PASS: ${PMS_DB_PASSWORD:?configure PMS_DB_PASSWORD in .env}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - pms_storage:/var/www/html/storage
+    expose:
+      - "80"
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "php", "-r", "$$c=@file_get_contents('http://127.0.0.1/health.php'); exit($$c===false?1:0);"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
   totem-api:
     build:
       context: ./modules/totem_autoatendimento
@@ -168,6 +198,8 @@ services:
     command: ["sh", "-c", "echo backup-helper-ready"]
     volumes:
       - totem_data:/source/totem:ro
+      - pms_storage:/source/pms:ro
+      - face_scanner_data:/source/face-scanner:ro
     networks:
       - backend
     security_opt:
@@ -184,6 +216,9 @@ volumes:
   mysql_data:
     external: true
     name: hub_core_mysql_data
+  pms_storage:
+    external: true
+    name: hub_core_pms_storage
   totem_data:
     external: true
     name: hub_core_totem_data
