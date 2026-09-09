@@ -26,8 +26,6 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
-# Atualiza primeiro o repositório pai. Se o próprio script mudar durante o
-# fast-forward, reinicia a execução usando a nova versão e o mesmo modo.
 if [[ "$SKIP_PULL" -eq 0 ]]; then
   if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
     echo "ERRO: hub_core possui alterações locais em arquivos versionados."
@@ -60,8 +58,6 @@ fi
 
 echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU"
 
-# Baixa/posiciona cada módulo exatamente no commit homologado de
-# modules/modules.list. Produção nunca acompanha main dos módulos diretamente.
 echo "[modules] preparando versões aprovadas..."
 ./scripts/bootstrap.sh
 
@@ -70,11 +66,8 @@ EDGE_MODE="$EDGE_MODE" USE_GPU="$USE_GPU" ./scripts/preflight.sh
 
 COMPOSE=(docker compose -f compose.yml)
 if [[ "$EDGE_MODE" == "host" ]]; then
-  # Caddy/NGINX já existentes no Ubuntu continuam na borda. Somente 127.0.0.1
-  # recebe portas do Totem/HUB; Face Scanner e MySQL ficam 100% internos.
   COMPOSE+=( -f compose.host-edge.yml )
 else
-  # Use apenas depois que 80/443 forem liberadas no host.
   COMPOSE+=( --profile docker-edge )
 fi
 if [[ "$USE_GPU" == "1" ]]; then
@@ -82,8 +75,6 @@ if [[ "$USE_GPU" == "1" ]]; then
   COMPOSE+=( -f compose.gpu.yml )
 fi
 
-# Faz backup antes de alterar containers quando já existe uma instalação em
-# execução. Em primeiro deploy não há banco saudável e esta etapa é ignorada.
 mysql_cid="$(docker compose -f compose.yml ps -q mysql 2>/dev/null || true)"
 if [[ -n "$mysql_cid" ]]; then
   mysql_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$mysql_cid" 2>/dev/null || true)"
@@ -101,11 +92,11 @@ echo "[build] construindo imagens locais..."
 echo "[deploy] aplicando stack..."
 "${COMPOSE[@]}" up -d --remove-orphans
 
-SERVICES=(mysql hub-core totem-api face-scanner)
+SERVICES=(mysql hub-core pms totem-api face-scanner)
 if [[ "$EDGE_MODE" == "docker" ]]; then
   SERVICES=(gateway "${SERVICES[@]}")
 fi
-DEADLINE=$((SECONDS + 180))
+DEADLINE=$((SECONDS + 240))
 
 while true; do
   all_ok=1
@@ -147,6 +138,7 @@ printf '\n'
 if [[ "$EDGE_MODE" == "host" ]]; then
   echo "Totem Docker: http://${TOTEM_LOCAL_BIND:-127.0.0.1}:${TOTEM_LOCAL_PORT:-3080} (somente host)"
   echo "HUB Docker:   http://${HUB_LOCAL_BIND:-127.0.0.1}:${HUB_LOCAL_PORT:-3083} (somente host)"
+  echo "PMS Docker:   http://${PMS_LOCAL_BIND:-127.0.0.1}:${PMS_LOCAL_PORT:-3084} (somente host)"
   echo "Face Scanner: somente rede Docker em face-scanner:8091"
 fi
 
