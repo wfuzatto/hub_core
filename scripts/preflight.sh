@@ -31,16 +31,22 @@ if [[ ! -f .env ]]; then
 else
   chmod 600 .env
   if grep -q 'CHANGE_ME' .env; then
-    echo "ERRO: .env ainda contém segredos CHANGE_ME"
+    echo "ERRO: .env ainda contém valores CHANGE_ME"
     fail=1
   fi
 
-  # O Totem é acessado pelo navegador mesmo quando o edge permanece no host,
-  # portanto a origem usada pelo Face Scanner precisa ser real.
   if grep -Eq '^TOTEM_DOMAIN=(totem\.example\.com)?$' .env; then
     echo "ERRO: configure TOTEM_DOMAIN no .env (domínio ou IP usado no Totem)"
     fail=1
   fi
+
+  for key in PMS_DB_HOST PMS_DB_NAME PMS_DB_USER PMS_DB_PASSWORD; do
+    value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2- || true)"
+    if [[ -z "$value" ]]; then
+      echo "ERRO: configure $key no .env para o PMS hotelaria"
+      fail=1
+    fi
+  done
 
   if [[ "$EDGE_MODE" == "docker" ]]; then
     if grep -Eq '^(HUB_DOMAIN|FACE_SCANNER_DOMAIN)=.*example\.com$' .env; then
@@ -72,10 +78,11 @@ while IFS='|' read -r dest repo ref; do
   fi
 done < modules/modules.list
 
-# Modo host-edge: Caddy/NGINX existentes continuam donos de 80/443 e o stack
-# publica somente loopback para os serviços que o proxy precisa alcançar.
 if [[ "$EDGE_MODE" == "host" ]] && command -v ss >/dev/null 2>&1; then
-  for spec in "totem-api:${TOTEM_LOCAL_PORT:-3080}" "hub-core:${HUB_LOCAL_PORT:-3083}"; do
+  for spec in \
+    "totem-api:${TOTEM_LOCAL_PORT:-3080}" \
+    "hub-core:${HUB_LOCAL_PORT:-3083}" \
+    "pms:${PMS_LOCAL_PORT:-3084}"; do
     service="${spec%%:*}"
     port="${spec##*:}"
     cid="$(docker compose -f compose.yml -f compose.host-edge.yml ps -q "$service" 2>/dev/null || true)"
@@ -86,7 +93,6 @@ if [[ "$EDGE_MODE" == "host" ]] && command -v ss >/dev/null 2>&1; then
   done
 fi
 
-# Modo docker-edge: 80/443 só podem estar ocupadas pelo próprio gateway do stack.
 if [[ "$EDGE_MODE" == "docker" ]] && command -v ss >/dev/null 2>&1; then
   gateway_cid="$(docker compose --profile docker-edge -f compose.yml ps -q gateway 2>/dev/null || true)"
   if [[ -z "$gateway_cid" ]]; then
