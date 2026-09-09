@@ -70,7 +70,10 @@ def block(indent: str) -> str:
 {i}        }}
 {i}    }}
 
-{i}    redir /face-scanner /face-scanner/ 308
+{i}    # A raiz abre a tela rica de homologação do Totem, com as fotos
+{i}    # detectadas/alinhadas. APIs e assets técnicos permanecem no FastAPI.
+{i}    redir /face-scanner /totem/face-scanner-test.html 308
+{i}    redir /face-scanner/ /totem/face-scanner-test.html 308
 {i}    handle_path /face-scanner/* {{
 {i}        reverse_proxy 127.0.0.1:{face} {{
 {i}            header_up X-Forwarded-Prefix /face-scanner
@@ -128,10 +131,11 @@ log "Testando URLs públicas, APIs e assets"
 HUB_CODE="$(curl -kLsS -o /tmp/hub_core_public.$$ -w '%{http_code}' "${BASE_URL}/")"
 PMS_RESULT="$(curl -kLsS -o /tmp/hub_core_pms.$$ -w '%{http_code}|%{url_effective}' "${BASE_URL}/pms/")"
 TOTEM_CODE="$(curl -kLsS -o /tmp/hub_core_totem.$$ -w '%{http_code}' "${BASE_URL}/totem/")"
+FACE_UI_RESULT="$(curl -kLsS -o /tmp/hub_core_face_ui.$$ -w '%{http_code}|%{url_effective}' "${BASE_URL}/face-scanner/")"
 TOTEM_HEALTH="$(curl -kfsS "${BASE_URL}/totem/api/health")"
 TOTEM_CONFIG="$(curl -kfsS "${BASE_URL}/totem/api/config")"
 FACE_HEALTH="$(curl -kfsS "${BASE_URL}/face-scanner/api/v1/health")"
-trap 'rm -f /tmp/hub_core_public.$$ /tmp/hub_core_pms.$$ /tmp/hub_core_totem.$$' EXIT
+trap 'rm -f /tmp/hub_core_public.$$ /tmp/hub_core_pms.$$ /tmp/hub_core_totem.$$ /tmp/hub_core_face_ui.$$' EXIT
 
 curl -kfsS "${BASE_URL}/totem/styles.css" >/dev/null || fail "CSS do Totem não carregou"
 curl -kfsS "${BASE_URL}/totem/app.js" >/dev/null || fail "JavaScript do Totem não carregou"
@@ -141,11 +145,15 @@ curl -kfsS "${BASE_URL}/face-scanner/static/app.js?v=0.3.3" >/dev/null || fail "
 [[ "$HUB_CODE" == "200" ]] || fail "HUB público respondeu HTTP $HUB_CODE"
 [[ "${PMS_RESULT%%|*}" == "200" ]] || fail "PMS público respondeu ${PMS_RESULT%%|*}"
 [[ "$TOTEM_CODE" == "200" ]] || fail "Totem público respondeu HTTP $TOTEM_CODE"
+[[ "${FACE_UI_RESULT%%|*}" == "200" ]] || fail "Tela pública do Face respondeu ${FACE_UI_RESULT%%|*}"
+[[ "${FACE_UI_RESULT#*|}" == *"/totem/face-scanner-test.html"* ]] || fail "Face Scanner não abriu a tela rica de homologação do Totem"
 grep -q '/totem/' /tmp/hub_core_totem.$$ || fail "Totem respondeu 200, mas os assets não estão prefixados com /totem/"
+grep -q 'Rostos detectados' /tmp/hub_core_face_ui.$$ || fail "Tela rica do Face não contém os previews de rostos esperados"
 
 echo "HUB:          ${BASE_URL}/ -> HTTP $HUB_CODE"
 echo "PMS:          ${BASE_URL}/pms/ -> ${PMS_RESULT#*|}"
 echo "Totem:        ${BASE_URL}/totem/ -> HTTP $TOTEM_CODE"
+echo "Face UI:      ${FACE_UI_RESULT#*|}"
 echo "Totem health: $TOTEM_HEALTH"
 echo "Totem config: OK"
 echo "Face health:  $FACE_HEALTH"
