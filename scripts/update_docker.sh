@@ -40,6 +40,12 @@ fi
 chmod 600 .env
 chmod +x scripts/*.sh 2>/dev/null || true
 
+# O PMS faz parte do stack oficial. Esta etapa é idempotente e prepara
+# automaticamente acesso ao módulo privado, banco dedicado no MySQL do HUB,
+# schema, usuário da aplicação, primeiro administrador e storage persistente.
+echo "[pms] preparando PMS automaticamente..."
+bash scripts/prepare_pms.sh
+
 # Os volumes de produção são externos de propósito: isso impede que um
 # `docker compose down` comum controle/remova a persistência da plataforma.
 # Em uma instalação já existente, volume ausente é tratado como falha crítica
