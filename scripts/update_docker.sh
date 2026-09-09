@@ -40,20 +40,26 @@ fi
 chmod 600 .env
 
 # O PMS faz parte do stack oficial. Esta etapa é idempotente e prepara
-# automaticamente acesso ao módulo privado, banco dedicado no MySQL do HUB,
-# schema, usuário da aplicação, primeiro administrador e storage persistente.
+# automaticamente acesso ao módulo privado, banco, usuário, administrador
+# e storage persistente.
 echo "[pms] preparando PMS automaticamente..."
 bash scripts/prepare_pms.sh
 
-# Os volumes de produção são externos de propósito: isso impede que um
-# `docker compose down` comum controle/remova a persistência da plataforma.
-# Em uma instalação já existente, volume ausente é tratado como falha crítica
-# para evitar subir serviços com dados vazios por engano.
+# O Totem Food é novo no stack. Seu volume pode ser criado automaticamente
+# porque ainda não existia nas instalações anteriores. Os volumes antigos
+# continuam obrigatórios e nunca são recriados silenciosamente.
+echo "[totem-food] garantindo volume persistente..."
+if ! docker volume inspect hub_core_totem_food_uploads >/dev/null 2>&1; then
+  docker volume create hub_core_totem_food_uploads >/dev/null
+  echo "[totem-food] volume hub_core_totem_food_uploads criado"
+fi
+
 REQUIRED_VOLUMES=(
   hub_core_mysql_data
   hub_core_pms_storage
   hub_core_totem_data
   hub_core_face_scanner_data
+  hub_core_totem_food_uploads
 )
 
 echo "[storage] validando volumes persistentes..."
@@ -83,12 +89,16 @@ echo "[test] PMS"
 curl -fsS "http://127.0.0.1:${PMS_LOCAL_PORT:-3084}/health.php"
 printf '\n'
 
-echo "[test] Totem"
-curl -fsS http://127.0.0.1:3080/api/health
+echo "[test] Totem Hotel"
+curl -fsS "http://127.0.0.1:${TOTEM_LOCAL_PORT:-3080}/api/health"
+printf '\n'
+
+echo "[test] Totem Food"
+curl -fsS "http://127.0.0.1:${TOTEM_FOOD_LOCAL_PORT:-3085}/api/health"
 printf '\n'
 
 echo "[test] HUB"
-curl -fsSI http://127.0.0.1:3083/ | head -n 1
+curl -fsSI "http://127.0.0.1:${HUB_LOCAL_PORT:-3083}/" | head -n 1
 
 echo "[test] HTTPS"
 curl -kfsSI https://192.168.51.135/ | head -n 1
