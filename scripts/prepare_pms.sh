@@ -155,7 +155,7 @@ if [[ -n "$HUB_DB_USER" ]]; then
   if [[ ! "$HUB_DB_USER" =~ ^[A-Za-z0-9_.-]+$ ]]; then
     fail "MYSQL_USER contém caracteres não suportados para configuração automática"
   fi
-  HUB_USER_EXISTS="$("${COMPOSE[@]}" exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE user='\''${HUB_DB_USER}'\'' AND host='\''%'\''" -uroot' | tr -d '\r')"
+  HUB_USER_EXISTS="$("${COMPOSE[@]}" exec -T mysql sh -c "MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" mysql -Nse \"SELECT COUNT(*) FROM mysql.user WHERE user='${HUB_DB_USER}' AND host='%';\" -uroot" | tr -d '\r')"
   if [[ "$HUB_USER_EXISTS" != "0" ]]; then
     "${COMPOSE[@]}" exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' <<SQL
 GRANT SELECT ON hotel_reservas.* TO '${HUB_DB_USER}'@'%';
