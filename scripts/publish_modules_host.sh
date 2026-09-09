@@ -52,7 +52,6 @@ totem = os.environ['TOTEM_PORT']
 face = os.environ['FACE_PORT']
 text = path.read_text(encoding='utf-8')
 
-
 def block(indent: str) -> str:
     i = indent
     return f'''{i}# HUB_CORE_MODULES_BEGIN
@@ -65,7 +64,7 @@ def block(indent: str) -> str:
 {i}    }}
 
 {i}    redir /totem /totem/ 308
-{i}    handle /totem/* {{
+{i}    handle_path /totem/* {{
 {i}        reverse_proxy 127.0.0.1:{totem} {{
 {i}            header_up X-Forwarded-Prefix /totem
 {i}        }}
@@ -125,13 +124,19 @@ else
   caddy reload --config "$CADDYFILE" --adapter caddyfile
 fi
 
-log "Testando URLs públicas"
+log "Testando URLs públicas, APIs e assets"
 HUB_CODE="$(curl -kLsS -o /tmp/hub_core_public.$$ -w '%{http_code}' "${BASE_URL}/")"
 PMS_RESULT="$(curl -kLsS -o /tmp/hub_core_pms.$$ -w '%{http_code}|%{url_effective}' "${BASE_URL}/pms/")"
 TOTEM_CODE="$(curl -kLsS -o /tmp/hub_core_totem.$$ -w '%{http_code}' "${BASE_URL}/totem/")"
 TOTEM_HEALTH="$(curl -kfsS "${BASE_URL}/totem/api/health")"
+TOTEM_CONFIG="$(curl -kfsS "${BASE_URL}/totem/api/config")"
 FACE_HEALTH="$(curl -kfsS "${BASE_URL}/face-scanner/api/v1/health")"
 trap 'rm -f /tmp/hub_core_public.$$ /tmp/hub_core_pms.$$ /tmp/hub_core_totem.$$' EXIT
+
+curl -kfsS "${BASE_URL}/totem/styles.css" >/dev/null || fail "CSS do Totem não carregou"
+curl -kfsS "${BASE_URL}/totem/app.js" >/dev/null || fail "JavaScript do Totem não carregou"
+curl -kfsS "${BASE_URL}/face-scanner/static/styles.css?v=0.3.3" >/dev/null || fail "CSS do Face Scanner não carregou"
+curl -kfsS "${BASE_URL}/face-scanner/static/app.js?v=0.3.3" >/dev/null || fail "JavaScript do Face Scanner não carregou"
 
 [[ "$HUB_CODE" == "200" ]] || fail "HUB público respondeu HTTP $HUB_CODE"
 [[ "${PMS_RESULT%%|*}" == "200" ]] || fail "PMS público respondeu ${PMS_RESULT%%|*}"
@@ -142,7 +147,9 @@ echo "HUB:          ${BASE_URL}/ -> HTTP $HUB_CODE"
 echo "PMS:          ${BASE_URL}/pms/ -> ${PMS_RESULT#*|}"
 echo "Totem:        ${BASE_URL}/totem/ -> HTTP $TOTEM_CODE"
 echo "Totem health: $TOTEM_HEALTH"
+echo "Totem config: OK"
 echo "Face health:  $FACE_HEALTH"
+echo "Assets Totem/Face: OK"
 echo
 echo "PUBLICAÇÃO POR MÓDULOS CONCLUÍDA"
 echo "  ${BASE_URL}/"
