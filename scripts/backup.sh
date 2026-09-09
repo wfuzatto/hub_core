@@ -15,8 +15,11 @@ mkdir -p "$DEST"
 echo "Backup MySQL do HUB Core..."
 docker compose exec -T mysql sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --all-databases --single-transaction --routines --events --triggers' | gzip > "$DEST/mysql-all.sql.gz"
 
-echo "Backup dados persistentes do Totem..."
+echo "Backup dados persistentes do Totem Hotel..."
 docker compose --profile tools run --rm --no-deps backup-helper sh -c 'tar -czf - -C /source/totem .' > "$DEST/totem-data.tar.gz"
+
+echo "Backup uploads persistentes do Totem Food..."
+docker compose --profile tools run --rm --no-deps backup-helper sh -c 'tar -czf - -C /source/totem-food .' > "$DEST/totem-food-uploads.tar.gz"
 
 echo "Backup storage persistente do PMS..."
 docker compose --profile tools run --rm --no-deps backup-helper sh -c 'tar -czf - -C /source/pms .' > "$DEST/pms-storage.tar.gz"
