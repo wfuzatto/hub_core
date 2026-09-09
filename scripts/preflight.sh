@@ -90,7 +90,8 @@ if [[ "$EDGE_MODE" == "host" ]] && command -v ss >/dev/null 2>&1; then
   for spec in \
     "totem-api:${TOTEM_LOCAL_PORT:-3080}" \
     "hub-core:${HUB_LOCAL_PORT:-3083}" \
-    "pms:${PMS_LOCAL_PORT:-3084}"; do
+    "pms:${PMS_LOCAL_PORT:-3084}" \
+    "totem-food:${TOTEM_FOOD_LOCAL_PORT:-3085}"; do
     service="${spec%%:*}"
     port="${spec##*:}"
     cid="$(docker compose -f compose.yml -f compose.host-edge.yml ps -q "$service" 2>/dev/null || true)"
@@ -140,4 +141,4 @@ fi
 
 "${COMPOSE[@]}" config >/dev/null
 
-echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU banco=hotel_reservas"
+echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU banco_pms=hotel_reservas banco_food=totem_food"
