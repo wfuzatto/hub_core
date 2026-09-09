@@ -45,6 +45,11 @@ chmod 600 .env
 echo "[pms] preparando PMS automaticamente..."
 bash scripts/prepare_pms.sh
 
+# Baixa e fixa todos os módulos homologados antes de validar o Compose.
+# Isso inclui o Totem Food em instalações onde ele ainda não existe localmente.
+echo "[modules] preparando módulos homologados..."
+bash scripts/bootstrap.sh
+
 # O Totem Food é novo no stack. Seu volume pode ser criado automaticamente
 # porque ainda não existia nas instalações anteriores. Os volumes antigos
 # continuam obrigatórios e nunca são recriados silenciosamente.
