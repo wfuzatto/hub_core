@@ -171,11 +171,7 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" <<SQL
-        CREATE DATABASE IF NOT EXISTS `totem_food` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
-        GRANT ALL PRIVILEGES ON `totem_food`.* TO '$$MYSQL_USER'@'%';
-        FLUSH PRIVILEGES;
-        SQL
+        mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS \\`totem_food\\` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL PRIVILEGES ON \\`totem_food\\`.* TO '$$MYSQL_USER'@'%'; FLUSH PRIVILEGES;"
     security_opt:
       - no-new-privileges:true
     logging: *default-logging
