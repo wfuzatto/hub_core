@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store">
+  <title>Redirecionando para envio de documentos</title>
+</head>
+<body>
+  <p>Redirecionando para o envio de documentos…</p>
+  <script>
+    location.replace('/totem/upload.html' + location.search + location.hash);
+  </script>
+  <noscript><a href="/totem/upload.html">Abrir envio de documentos</a></noscript>
+</body>
+</html>
