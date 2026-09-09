@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# Atualizador operacional do HUB Core.
-# Uso normal após a migração inicial:
+# Atualizador operacional oficial do HUB Core.
+# Uso normal:
 #   bash scripts/update_docker.sh
 # GPU opcional:
 #   USE_GPU=1 bash scripts/update_docker.sh
@@ -40,6 +40,28 @@ fi
 chmod 600 .env
 chmod +x scripts/*.sh 2>/dev/null || true
 
+# Os volumes de produção são externos de propósito: isso impede que um
+# `docker compose down` comum controle/remova a persistência da plataforma.
+# Em uma instalação já existente, volume ausente é tratado como falha crítica
+# para evitar subir MySQL/Totem/Face Scanner com dados vazios por engano.
+REQUIRED_VOLUMES=(
+  hub_core_mysql_data
+  hub_core_totem_data
+  hub_core_face_scanner_data
+)
+
+echo "[storage] validando volumes persistentes..."
+for volume in "${REQUIRED_VOLUMES[@]}"; do
+  if ! docker volume inspect "$volume" >/dev/null 2>&1; then
+    echo "ERRO: volume persistente obrigatório ausente: $volume" >&2
+    echo "Atualização abortada para evitar inicialização com dados vazios." >&2
+    exit 1
+  fi
+done
+
+COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml)
+"${COMPOSE[@]}" config >/dev/null
+
 ARGS=(--host-edge)
 if [[ "${USE_GPU:-0}" == "1" ]]; then
   ARGS+=(--gpu)
@@ -49,7 +71,7 @@ echo "[deploy] executando atualização oficial..."
 ./scripts/update.sh "${ARGS[@]}"
 
 echo "[status]"
-docker compose -f compose.yml -f compose.host-edge.yml ps
+"${COMPOSE[@]}" ps
 
 echo "[test] Totem"
 curl -fsS http://127.0.0.1:3080/api/health
