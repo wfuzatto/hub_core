@@ -21,7 +21,20 @@
 {$TOTEM_DOMAIN} {
     import common_headers
     encode zstd gzip
-    reverse_proxy totem-api:3080
+
+    route {
+        redir /pms /pms/ 308
+
+        handle_path /pms/* {
+            reverse_proxy pms:80 {
+                header_up X-Forwarded-Prefix /pms
+            }
+        }
+
+        handle {
+            reverse_proxy totem-api:3080
+        }
+    }
 }
 
 {$FACE_SCANNER_DOMAIN} {
