@@ -80,10 +80,10 @@ def block(indent: str) -> str:
 {i}        }}
 {i}    }}
 
-{i}    # A raiz abre a tela rica de homologação do Totem, com as fotos
-{i}    # detectadas/alinhadas. APIs e assets técnicos permanecem no FastAPI.
-{i}    redir /face-scanner /totem/face-scanner-test.html 308
-{i}    redir /face-scanner/ /totem/face-scanner-test.html 308
+{i}    # Face Scanner é independente do Totem. A tela de integração do Totem
+{i}    # continua disponível em /totem/face-scanner-test.html, sem substituir
+{i}    # a raiz pública do próprio Face Scanner.
+{i}    redir /face-scanner /face-scanner/ 308
 {i}    handle_path /face-scanner/* {{
 {i}        reverse_proxy 127.0.0.1:{face} {{
 {i}            header_up X-Forwarded-Prefix /face-scanner
@@ -161,15 +161,14 @@ curl -kfsS "${BASE_URL}/face-scanner/static/app.js?v=0.3.3" >/dev/null || fail "
 [[ "$TOTEM_CODE" == "200" ]] || fail "Totem público respondeu HTTP $TOTEM_CODE"
 [[ "$FOOD_CODE" == "200" ]] || fail "Totem Food público respondeu HTTP $FOOD_CODE"
 [[ "${FACE_UI_RESULT%%|*}" == "200" ]] || fail "Tela pública do Face respondeu ${FACE_UI_RESULT%%|*}"
-[[ "${FACE_UI_RESULT#*|}" == *"/totem/face-scanner-test.html"* ]] || fail "Face Scanner não abriu a tela rica de homologação do Totem"
+[[ "${FACE_UI_RESULT#*|}" == *"/face-scanner/"* ]] || fail "Face Scanner público não permaneceu no módulo independente"
 grep -q '/totem/' /tmp/hub_core_totem.$$ || fail "Totem respondeu 200, mas os assets não estão prefixados com /totem/"
-grep -q 'Rostos detectados' /tmp/hub_core_face_ui.$$ || fail "Tela rica do Face não contém os previews de rostos esperados"
 
 echo "HUB:          ${BASE_URL}/ -> HTTP $HUB_CODE"
 echo "PMS:          ${BASE_URL}/pms/ -> ${PMS_RESULT#*|}"
 echo "Totem:        ${BASE_URL}/totem/ -> HTTP $TOTEM_CODE"
 echo "Totem Food:   ${BASE_URL}/food/ -> HTTP $FOOD_CODE"
-echo "Face UI:      ${FACE_UI_RESULT#*|}"
+echo "Face Scanner: ${FACE_UI_RESULT#*|}"
 echo "Totem health: $TOTEM_HEALTH"
 echo "Food health:  $FOOD_HEALTH"
 echo "Totem config: OK"
