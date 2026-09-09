@@ -52,17 +52,17 @@ if [[ "$SKIP_PULL" -eq 0 ]]; then
     args=(--no-pull)
     [[ "$USE_GPU" == "1" ]] && args+=(--gpu)
     [[ "$EDGE_MODE" == "docker" ]] && args+=(--docker-edge) || args+=(--host-edge)
-    exec "$ROOT/scripts/update.sh" "${args[@]}"
+    exec bash "$ROOT/scripts/update.sh" "${args[@]}"
   fi
 fi
 
 echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU"
 
 echo "[modules] preparando versões aprovadas..."
-./scripts/bootstrap.sh
+bash scripts/bootstrap.sh
 
 echo "[preflight] validando host/configuração..."
-EDGE_MODE="$EDGE_MODE" USE_GPU="$USE_GPU" ./scripts/preflight.sh
+EDGE_MODE="$EDGE_MODE" USE_GPU="$USE_GPU" bash scripts/preflight.sh
 
 COMPOSE=(docker compose -f compose.yml)
 if [[ "$EDGE_MODE" == "host" ]]; then
@@ -80,7 +80,7 @@ if [[ -n "$mysql_cid" ]]; then
   mysql_health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$mysql_cid" 2>/dev/null || true)"
   if [[ "$mysql_health" == "healthy" ]]; then
     echo "[backup] criando backup pré-atualização..."
-    ./scripts/backup.sh
+    bash scripts/backup.sh
   else
     echo "[backup] MySQL Docker não está healthy; backup automático pré-update foi ignorado."
   fi
