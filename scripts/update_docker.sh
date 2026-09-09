@@ -38,7 +38,6 @@ if [[ "$LOCAL_SHA" != "$REMOTE_SHA" ]]; then
 fi
 
 chmod 600 .env
-chmod +x scripts/*.sh 2>/dev/null || true
 
 # O PMS faz parte do stack oficial. Esta etapa é idempotente e prepara
 # automaticamente acesso ao módulo privado, banco dedicado no MySQL do HUB,
@@ -75,7 +74,7 @@ if [[ "${USE_GPU:-0}" == "1" ]]; then
 fi
 
 echo "[deploy] executando atualização oficial..."
-./scripts/update.sh "${ARGS[@]}"
+bash scripts/update.sh "${ARGS[@]}"
 
 echo "[status]"
 "${COMPOSE[@]}" ps
