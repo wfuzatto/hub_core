@@ -3,6 +3,9 @@ services:
     environment:
       APP_ENV: homologation
       FACE_VERIFICATION_PROVIDER: internal
+      # Dashboard standalone liberado somente neste override de homologação.
+      # Não promover esta opção para produção.
+      DASHBOARD_UNAUTHENTICATED: "true"
       # Thresholds fornecidos pelo operador para homologação técnica.
       # Perfil pretendido: FMR alvo 0.001. Não promover para produção sem validação formal.
       FACE_REVIEW_THRESHOLD: "0.363"
