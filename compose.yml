@@ -182,5 +182,11 @@ volumes:
   caddy_data:
   caddy_config:
   mysql_data:
+    external: true
+    name: hub_core_mysql_data
   totem_data:
+    external: true
+    name: hub_core_totem_data
   face_scanner_data:
+    external: true
+    name: hub_core_face_scanner_data
