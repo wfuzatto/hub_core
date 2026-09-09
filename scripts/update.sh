@@ -56,7 +56,7 @@ if [[ "$SKIP_PULL" -eq 0 ]]; then
   fi
 fi
 
-echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU"
+echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU face=internal-sface"
 
 echo "[modules] preparando versões aprovadas..."
 bash scripts/bootstrap.sh
@@ -70,12 +70,16 @@ fi
 echo "[preflight] validando host/configuração..."
 EDGE_MODE="$EDGE_MODE" USE_GPU="$USE_GPU" bash scripts/preflight.sh
 
+# O override biométrico real faz parte do deploy normal homologado. Ele deve vir
+# depois do host-edge para substituir o provider mock e manter os thresholds
+# fornecidos pelo operador: review=0.363 e match=0.500.
 COMPOSE=(docker compose -f compose.yml)
 if [[ "$EDGE_MODE" == "host" ]]; then
   COMPOSE+=( -f compose.host-edge.yml )
 else
   COMPOSE+=( --profile docker-edge )
 fi
+COMPOSE+=( -f compose.face-real-test.yml )
 if [[ "$USE_GPU" == "1" ]]; then
   echo "[gpu] override NVIDIA habilitado"
   COMPOSE+=( -f compose.gpu.yml )
@@ -146,7 +150,7 @@ if [[ "$EDGE_MODE" == "host" ]]; then
   echo "HUB Docker:   http://${HUB_LOCAL_BIND:-127.0.0.1}:${HUB_LOCAL_PORT:-3083} (somente host)"
   echo "PMS Docker:   http://${PMS_LOCAL_BIND:-127.0.0.1}:${PMS_LOCAL_PORT:-3084} (somente host)"
   echo "Totem Food:   http://${TOTEM_FOOD_LOCAL_BIND:-127.0.0.1}:${TOTEM_FOOD_LOCAL_PORT:-3085} (somente host)"
-  echo "Face Scanner: somente rede Docker em face-scanner:8091"
+  echo "Face Scanner: internal SFace + thresholds homologados em face-scanner:8091"
 fi
 
 echo "Atualização Docker concluída com sucesso."
