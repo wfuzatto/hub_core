@@ -43,9 +43,10 @@ chmod +x scripts/*.sh 2>/dev/null || true
 # Os volumes de produção são externos de propósito: isso impede que um
 # `docker compose down` comum controle/remova a persistência da plataforma.
 # Em uma instalação já existente, volume ausente é tratado como falha crítica
-# para evitar subir MySQL/Totem/Face Scanner com dados vazios por engano.
+# para evitar subir serviços com dados vazios por engano.
 REQUIRED_VOLUMES=(
   hub_core_mysql_data
+  hub_core_pms_storage
   hub_core_totem_data
   hub_core_face_scanner_data
 )
@@ -72,6 +73,10 @@ echo "[deploy] executando atualização oficial..."
 
 echo "[status]"
 "${COMPOSE[@]}" ps
+
+echo "[test] PMS"
+curl -fsS "http://127.0.0.1:${PMS_LOCAL_PORT:-3084}/health.php"
+printf '\n'
 
 echo "[test] Totem"
 curl -fsS http://127.0.0.1:3080/api/health
