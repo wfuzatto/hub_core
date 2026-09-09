@@ -38,12 +38,10 @@
             }
         }
 
-        # A raiz pública do Face Scanner abre a tela rica de homologação do Totem,
-        # que exibe os rostos detectados/alinhados ao final. As rotas técnicas
-        # /face-scanner/api/* e /face-scanner/static/* continuam indo diretamente
-        # para o serviço FastAPI abaixo.
-        redir /face-scanner /totem/face-scanner-test.html 308
-        redir /face-scanner/ /totem/face-scanner-test.html 308
+        # Face Scanner é um módulo independente do Totem. A raiz e as APIs
+        # permanecem no próprio serviço FastAPI; a tela /totem/face-scanner-test.html
+        # é apenas a homologação da integração Totem -> Face Scanner.
+        redir /face-scanner /face-scanner/ 308
         handle_path /face-scanner/* {
             reverse_proxy face-scanner:8091 {
                 header_up X-Forwarded-Prefix /face-scanner
