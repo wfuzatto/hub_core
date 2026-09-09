@@ -116,7 +116,7 @@ else
 fi
 
 log "Preparando módulos homologados"
-./scripts/bootstrap.sh
+bash scripts/bootstrap.sh
 
 COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml)
 "${COMPOSE[@]}" config >/dev/null
