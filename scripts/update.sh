@@ -61,6 +61,12 @@ echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU"
 echo "[modules] preparando versões aprovadas..."
 bash scripts/bootstrap.sh
 
+echo "[storage] garantindo volume novo do Totem Food..."
+if ! docker volume inspect hub_core_totem_food_uploads >/dev/null 2>&1; then
+  docker volume create hub_core_totem_food_uploads >/dev/null
+  echo "[storage] criado hub_core_totem_food_uploads"
+fi
+
 echo "[preflight] validando host/configuração..."
 EDGE_MODE="$EDGE_MODE" USE_GPU="$USE_GPU" bash scripts/preflight.sh
 
@@ -92,7 +98,7 @@ echo "[build] construindo imagens locais..."
 echo "[deploy] aplicando stack..."
 "${COMPOSE[@]}" up -d --remove-orphans
 
-SERVICES=(mysql hub-core pms totem-api face-scanner)
+SERVICES=(mysql hub-core pms totem-api totem-food face-scanner)
 if [[ "$EDGE_MODE" == "docker" ]]; then
   SERVICES=(gateway "${SERVICES[@]}")
 fi
@@ -136,9 +142,10 @@ printf '\n'
 "${COMPOSE[@]}" ps
 
 if [[ "$EDGE_MODE" == "host" ]]; then
-  echo "Totem Docker: http://${TOTEM_LOCAL_BIND:-127.0.0.1}:${TOTEM_LOCAL_PORT:-3080} (somente host)"
+  echo "Totem Hotel:  http://${TOTEM_LOCAL_BIND:-127.0.0.1}:${TOTEM_LOCAL_PORT:-3080} (somente host)"
   echo "HUB Docker:   http://${HUB_LOCAL_BIND:-127.0.0.1}:${HUB_LOCAL_PORT:-3083} (somente host)"
   echo "PMS Docker:   http://${PMS_LOCAL_BIND:-127.0.0.1}:${PMS_LOCAL_PORT:-3084} (somente host)"
+  echo "Totem Food:   http://${TOTEM_FOOD_LOCAL_BIND:-127.0.0.1}:${TOTEM_FOOD_LOCAL_PORT:-3085} (somente host)"
   echo "Face Scanner: somente rede Docker em face-scanner:8091"
 fi
 
