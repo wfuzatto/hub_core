@@ -25,7 +25,7 @@
         }
 
         redir /totem /totem/ 308
-        handle /totem/* {
+        handle_path /totem/* {
             reverse_proxy totem-api:3080 {
                 header_up X-Forwarded-Prefix /totem
             }
