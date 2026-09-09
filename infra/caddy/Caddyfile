@@ -15,29 +15,31 @@
 {$HUB_DOMAIN} {
     import common_headers
     encode zstd gzip
-    reverse_proxy hub-core:80
-}
-
-{$TOTEM_DOMAIN} {
-    import common_headers
-    encode zstd gzip
 
     route {
         redir /pms /pms/ 308
-
         handle_path /pms/* {
             reverse_proxy pms:80 {
                 header_up X-Forwarded-Prefix /pms
             }
         }
 
+        redir /totem /totem/ 308
+        handle /totem/* {
+            reverse_proxy totem-api:3080 {
+                header_up X-Forwarded-Prefix /totem
+            }
+        }
+
+        redir /face-scanner /face-scanner/ 308
+        handle_path /face-scanner/* {
+            reverse_proxy face-scanner:8091 {
+                header_up X-Forwarded-Prefix /face-scanner
+            }
+        }
+
         handle {
-            reverse_proxy totem-api:3080
+            reverse_proxy hub-core:80
         }
     }
-}
-
-{$FACE_SCANNER_DOMAIN} {
-    import common_headers
-    reverse_proxy face-scanner:8091
 }
