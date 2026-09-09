@@ -94,9 +94,9 @@ echo "[status]"
 "${COMPOSE[@]}" ps
 
 echo "[test] Face Scanner config efetiva"
-FACE_PROVIDER="$("${COMPOSE[@]}" config | awk '/face-scanner:/{f=1} f&&/FACE_VERIFICATION_PROVIDER:/{print $2; exit}')"
-FACE_REVIEW="$("${COMPOSE[@]}" config | awk '/face-scanner:/{f=1} f&&/FACE_REVIEW_THRESHOLD:/{print $2; exit}')"
-FACE_MATCH="$("${COMPOSE[@]}" config | awk '/face-scanner:/{f=1} f&&/FACE_MATCH_THRESHOLD:/{print $2; exit}')"
+FACE_PROVIDER="$("${COMPOSE[@]}" config | awk '/face-scanner:/{f=1} f&&/FACE_VERIFICATION_PROVIDER:/{print $2; exit}' | tr -d '"')"
+FACE_REVIEW="$("${COMPOSE[@]}" config | awk '/face-scanner:/{f=1} f&&/FACE_REVIEW_THRESHOLD:/{print $2; exit}' | tr -d '"')"
+FACE_MATCH="$("${COMPOSE[@]}" config | awk '/face-scanner:/{f=1} f&&/FACE_MATCH_THRESHOLD:/{print $2; exit}' | tr -d '"')"
 echo "provider=${FACE_PROVIDER:-unknown} review=${FACE_REVIEW:-unknown} match=${FACE_MATCH:-unknown}"
 [[ "${FACE_PROVIDER:-}" == "internal" ]] || { echo "ERRO: provider facial efetivo não é internal" >&2; exit 1; }
 [[ "${FACE_REVIEW:-}" == "0.363" ]] || { echo "ERRO: FACE_REVIEW_THRESHOLD efetivo inesperado" >&2; exit 1; }
