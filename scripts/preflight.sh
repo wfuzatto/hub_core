@@ -48,6 +48,14 @@ else
     fi
   done
 
+  MYSQL_DATABASE_VALUE="$(grep -E '^MYSQL_DATABASE=' .env | tail -1 | cut -d= -f2- || true)"
+  PMS_DB_NAME_VALUE="$(grep -E '^PMS_DB_NAME=' .env | tail -1 | cut -d= -f2- || true)"
+  if [[ "$MYSQL_DATABASE_VALUE" != "hotel_reservas" || "$PMS_DB_NAME_VALUE" != "hotel_reservas" ]]; then
+    echo "ERRO: HUB Core e PMS devem usar o banco único hotel_reservas"
+    echo "MYSQL_DATABASE=$MYSQL_DATABASE_VALUE PMS_DB_NAME=$PMS_DB_NAME_VALUE"
+    fail=1
+  fi
+
   if [[ "$EDGE_MODE" == "docker" ]]; then
     if grep -Eq '^(HUB_DOMAIN|FACE_SCANNER_DOMAIN)=.*example\.com$' .env; then
       echo "ERRO: troque os domínios example.com antes de usar o gateway Docker"
@@ -132,4 +140,4 @@ fi
 
 "${COMPOSE[@]}" config >/dev/null
 
-echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU"
+echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU banco=hotel_reservas"
