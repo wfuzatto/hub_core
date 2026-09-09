@@ -86,7 +86,7 @@ get_env(){
   grep -E "^${key}=" .env | tail -1 | cut -d= -f2- || true
 }
 
-log "Configurando banco interno do PMS automaticamente"
+log "Configurando banco único do HUB Core + PMS"
 PMS_DB_PASSWORD="$(get_env PMS_DB_PASSWORD)"
 if [[ -z "$PMS_DB_PASSWORD" || "$PMS_DB_PASSWORD" == CHANGE_ME* ]]; then
   PMS_DB_PASSWORD="$(openssl rand -hex 24)"
@@ -97,6 +97,9 @@ if [[ -z "$PMS_ADMIN_PASSWORD" || "$PMS_ADMIN_PASSWORD" == CHANGE_ME* ]]; then
   PMS_ADMIN_PASSWORD="$(openssl rand -hex 12)"
 fi
 
+# HUB Core e PMS usam o mesmo schema. Usuários SQL continuam separados por
+# privilégio: pms_app opera o PMS e hub_app fica apenas com leitura para health.
+upsert_env MYSQL_DATABASE "$PMS_DB_NAME"
 upsert_env PMS_DB_HOST "$PMS_DB_HOST"
 upsert_env PMS_DB_PORT "$PMS_DB_PORT"
 upsert_env PMS_DB_NAME "$PMS_DB_NAME"
@@ -138,7 +141,7 @@ done
 
 echo "MySQL: healthy"
 
-log "Criando banco e usuário dedicados do PMS"
+log "Criando schema único e usuário dedicado do PMS"
 "${COMPOSE[@]}" exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' <<SQL
 CREATE DATABASE IF NOT EXISTS hotel_reservas CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS 'pms_app'@'%' IDENTIFIED BY '${PMS_DB_PASSWORD}';
@@ -146,6 +149,20 @@ ALTER USER 'pms_app'@'%' IDENTIFIED BY '${PMS_DB_PASSWORD}';
 GRANT ALL PRIVILEGES ON hotel_reservas.* TO 'pms_app'@'%';
 FLUSH PRIVILEGES;
 SQL
+
+HUB_DB_USER="$(get_env MYSQL_USER)"
+if [[ -n "$HUB_DB_USER" ]]; then
+  if [[ ! "$HUB_DB_USER" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    fail "MYSQL_USER contém caracteres não suportados para configuração automática"
+  fi
+  HUB_USER_EXISTS="$("${COMPOSE[@]}" exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -Nse "SELECT COUNT(*) FROM mysql.user WHERE user='\''${HUB_DB_USER}'\'' AND host='\''%'\''" -uroot' | tr -d '\r')"
+  if [[ "$HUB_USER_EXISTS" != "0" ]]; then
+    "${COMPOSE[@]}" exec -T mysql sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot' <<SQL
+GRANT SELECT ON hotel_reservas.* TO '${HUB_DB_USER}'@'%';
+FLUSH PRIVILEGES;
+SQL
+  fi
+fi
 
 PMS_ROOT="$ROOT/modules/hotelaria/sistema"
 [[ -f "$PMS_ROOT/banco.sql" ]] || fail "schema PMS ausente: $PMS_ROOT/banco.sql"
@@ -203,10 +220,10 @@ log "Validando acesso do usuário da aplicação"
 echo
 cat <<EOF
 PMS preparado automaticamente para o HUB Core.
-Banco:      mysql:3306/$PMS_DB_NAME
-Usuário:    $PMS_DB_USER
-Storage:    $PMS_VOLUME
-Host-edge:  http://127.0.0.1:$PMS_LOCAL_PORT
+Banco único: mysql:3306/$PMS_DB_NAME
+Usuário PMS: $PMS_DB_USER
+Storage:     $PMS_VOLUME
+Host-edge:   http://127.0.0.1:$PMS_LOCAL_PORT
 
 Nenhuma senha foi exibida. Segredos permanecem apenas no .env local.
 EOF
