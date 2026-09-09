@@ -159,6 +159,76 @@ services:
     stop_grace_period: 30s
     logging: *default-logging
 
+  totem-food-db-init:
+    image: ${MYSQL_IMAGE:-mysql:8.4.11}
+    restart: "no"
+    env_file: .env
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - backend
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" <<SQL
+        CREATE DATABASE IF NOT EXISTS `totem_food` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;
+        GRANT ALL PRIVILEGES ON `totem_food`.* TO '$$MYSQL_USER'@'%';
+        FLUSH PRIVILEGES;
+        SQL
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  totem-food:
+    build:
+      context: ./modules/totem_food
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 3088
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: totem_food
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: ${TOTEM_ADMIN_PASSWORD}
+      KDS_USER: kds
+      KDS_PASSWORD: ${TOTEM_ADMIN_PASSWORD}
+      INTEGRATION_KEY: ${FACE_SCANNER_API_KEY}
+      PAYMENT_PROVIDER: ${TOTEM_FOOD_PAYMENT_PROVIDER:-mock}
+      FISCAL_PROVIDER: ${TOTEM_FOOD_FISCAL_PROVIDER:-mock}
+      FISCAL_PROVIDER_URL: ${TOTEM_FOOD_FISCAL_PROVIDER_URL:-}
+      FISCAL_PROVIDER_TOKEN: ${TOTEM_FOOD_FISCAL_PROVIDER_TOKEN:-}
+      IDLE_AD_SECONDS: ${TOTEM_FOOD_IDLE_AD_SECONDS:-45}
+      ABANDONED_CART_SECONDS: ${TOTEM_FOOD_ABANDONED_CART_SECONDS:-120}
+      STORE_NAME: ${TOTEM_FOOD_STORE_NAME:-Totem Food}
+      STORE_TAX_ID: ${TOTEM_FOOD_STORE_TAX_ID:-}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - totem_food_uploads:/app/data/uploads
+    expose:
+      - "3088"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      totem-food-db-init:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3088/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
   face-scanner:
     build:
       context: ./modules/face_scanner
@@ -200,6 +270,7 @@ services:
       - totem_data:/source/totem:ro
       - pms_storage:/source/pms:ro
       - face_scanner_data:/source/face-scanner:ro
+      - totem_food_uploads:/source/totem-food:ro
     networks:
       - backend
     security_opt:
@@ -225,3 +296,6 @@ volumes:
   face_scanner_data:
     external: true
     name: hub_core_face_scanner_data
+  totem_food_uploads:
+    external: true
+    name: hub_core_totem_food_uploads
