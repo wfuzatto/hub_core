@@ -5,5 +5,5 @@
 # github-hotelaria, configurado no servidor com uma deploy key somente leitura.
 hotelaria|git@github-hotelaria:wfuzatto/hotelaria.git|5c5b6b2158b2620915b307b603a520f2876e020c
 totem_autoatendimento|https://github.com/wfuzatto/totem_autoatendimento.git|348552f3d1c2763d835118119620b57edc57c074
-face_scanner|https://github.com/wfuzatto/face_scanner.git|e9f4caa604078ab9635964b0c30505c5e9c0bd96
+face_scanner|https://github.com/wfuzatto/face_scanner.git|c9e9f1e1d404904fad60a9ac0e89dd2a00dbfc8c
 totem_food|https://github.com/wfuzatto/totem_food.git|b5decb75d3e26966d487f00bb49ba2684b02a972
