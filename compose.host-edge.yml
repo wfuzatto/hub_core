@@ -5,6 +5,10 @@ services:
     ports:
       - "${HUB_LOCAL_BIND:-127.0.0.1}:${HUB_LOCAL_PORT:-3083}:80"
 
+  pms:
+    ports:
+      - "${PMS_LOCAL_BIND:-127.0.0.1}:${PMS_LOCAL_PORT:-3084}:80"
+
   totem-api:
     ports:
       - "${TOTEM_LOCAL_BIND:-127.0.0.1}:${TOTEM_LOCAL_PORT:-3080}:3080"
