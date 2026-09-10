@@ -4,6 +4,6 @@
 # Módulos públicos usam HTTPS. O PMS hotelaria é privado e usa o alias SSH
 # github-hotelaria, configurado no servidor com uma deploy key somente leitura.
 hotelaria|git@github-hotelaria:wfuzatto/hotelaria.git|5c5b6b2158b2620915b307b603a520f2876e020c
-totem_autoatendimento|https://github.com/wfuzatto/totem_autoatendimento.git|fe20452ba2c49bd516f09d9f2c59e94fe793f657
+totem_autoatendimento|https://github.com/wfuzatto/totem_autoatendimento.git|4a358752294bc5def31b3083814833f69bd95d72
 face_scanner|https://github.com/wfuzatto/face_scanner.git|c9e9f1e1d404904fad60a9ac0e89dd2a00dbfc8c
 totem_food|https://github.com/wfuzatto/totem_food.git|49b38b201d5215821dd8a16be3a9dc4d785f8cce
