@@ -17,6 +17,10 @@ services:
     ports:
       - "${TOTEM_FOOD_LOCAL_BIND:-127.0.0.1}:${TOTEM_FOOD_LOCAL_PORT:-3085}:3088"
 
+  api-payment:
+    ports:
+      - "${PAYMENT_LOCAL_BIND:-127.0.0.1}:${PAYMENT_LOCAL_PORT:-3086}:3090"
+
   # Face Scanner permanece em homologação, mas sua ponte para o Caddy do host
   # fica restrita a loopback. A comunicação Totem -> Face usa face-scanner:8091
   # diretamente na rede Docker backend.

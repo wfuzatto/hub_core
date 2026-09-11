@@ -38,6 +38,15 @@
             }
         }
 
+        # Webhooks de adquirentes e API de pagamento. Endpoints internos continuam
+        # protegidos por X-Api-Key; webhooks validam assinatura do provedor/bridge.
+        redir /payments /payments/ 308
+        handle_path /payments/* {
+            reverse_proxy api-payment:3090 {
+                header_up X-Forwarded-Prefix /payments
+            }
+        }
+
         # Face Scanner é um módulo independente do Totem. A raiz e as APIs
         # permanecem no próprio serviço FastAPI; a tela /totem/face-scanner-test.html
         # é apenas a homologação da integração Totem -> Face Scanner.

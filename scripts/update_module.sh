@@ -10,7 +10,7 @@ LIST="$ROOT/modules/modules.list"
 fail(){ echo "ERRO: $*" >&2; exit 1; }
 log(){ printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 
-[[ -n "$MODULE" ]] || fail "uso: bash scripts/update_module.sh <totem_food|totem_autoatendimento|face_scanner|hotelaria>"
+[[ -n "$MODULE" ]] || fail "uso: bash scripts/update_module.sh <totem_food|totem_autoatendimento|face_scanner|hotelaria|api_pagamento>"
 [[ -f .env ]] || fail ".env ausente em $ROOT"
 [[ -f "$LIST" ]] || fail "modules/modules.list ausente"
 command -v git >/dev/null 2>&1 || fail "git não encontrado"
@@ -33,6 +33,10 @@ case "$MODULE" in
   hotelaria)
     SERVICE="pms"
     HEALTH_URL="http://127.0.0.1:${PMS_LOCAL_PORT:-3084}/health.php"
+    ;;
+  api_pagamento)
+    SERVICE="api-payment"
+    HEALTH_URL="http://127.0.0.1:${PAYMENT_LOCAL_PORT:-3086}/health"
     ;;
   *) fail "módulo inválido: $MODULE" ;;
 esac
@@ -90,6 +94,16 @@ if [[ "$MODULE" == "totem_food" ]]; then
 
   "${COMPOSE[@]}" run --rm --no-deps totem-food-db-init
   "${COMPOSE[@]}" rm -f -s totem-food-db-init >/dev/null 2>&1 || true
+fi
+
+if [[ "$MODULE" == "api_pagamento" ]]; then
+  log "Preparando schema próprio da API Pagamento"
+  MYSQL_CID="$("${COMPOSE[@]}" ps -q mysql)"
+  [[ -n "$MYSQL_CID" ]] || fail "MySQL do HUB não está em execução; atualização de pagamentos abortada"
+  MYSQL_HEALTH="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$MYSQL_CID")"
+  [[ "$MYSQL_HEALTH" == "healthy" || "$MYSQL_HEALTH" == "running" ]] || fail "MySQL não está pronto: $MYSQL_HEALTH"
+  "${COMPOSE[@]}" run --rm --no-deps api-payment-db-init
+  "${COMPOSE[@]}" rm -f -s api-payment-db-init >/dev/null 2>&1 || true
 fi
 
 log "Build somente de $SERVICE"

@@ -40,10 +40,10 @@ else
     fail=1
   fi
 
-  for key in PMS_DB_HOST PMS_DB_NAME PMS_DB_USER PMS_DB_PASSWORD; do
+  for key in PMS_DB_HOST PMS_DB_NAME PMS_DB_USER PMS_DB_PASSWORD PAYMENT_API_KEY; do
     value="$(grep -E "^${key}=" .env | tail -1 | cut -d= -f2- || true)"
     if [[ -z "$value" ]]; then
-      echo "ERRO: configure $key no .env para o PMS hotelaria"
+      echo "ERRO: configure $key no .env"
       fail=1
     fi
   done
@@ -91,7 +91,8 @@ if [[ "$EDGE_MODE" == "host" ]] && command -v ss >/dev/null 2>&1; then
     "totem-api:${TOTEM_LOCAL_PORT:-3080}" \
     "hub-core:${HUB_LOCAL_PORT:-3083}" \
     "pms:${PMS_LOCAL_PORT:-3084}" \
-    "totem-food:${TOTEM_FOOD_LOCAL_PORT:-3085}"; do
+    "totem-food:${TOTEM_FOOD_LOCAL_PORT:-3085}" \
+    "api-payment:${PAYMENT_LOCAL_PORT:-3086}"; do
     service="${spec%%:*}"
     port="${spec##*:}"
     cid="$(docker compose -f compose.yml -f compose.host-edge.yml ps -q "$service" 2>/dev/null || true)"
@@ -141,4 +142,4 @@ fi
 
 "${COMPOSE[@]}" config >/dev/null
 
-echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU banco_pms=hotel_reservas banco_food=totem_food"
+echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU banco_pms=hotel_reservas banco_food=totem_food banco_pagamentos=api_pagamento"

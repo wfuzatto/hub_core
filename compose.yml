@@ -141,6 +141,8 @@ services:
       PRINT_JOB_DIR: /app/data/print-jobs
       FACE_SCANNER_URL: http://face-scanner:8091
       FACE_SCANNER_API_KEY: ${FACE_SCANNER_API_KEY}
+      PAYMENT_GATEWAY_URL: http://api-payment:3090
+      PAYMENT_GATEWAY_API_KEY: ${PAYMENT_API_KEY}
       TZ: ${TZ:-America/Sao_Paulo}
     volumes:
       - totem_data:/app/data
@@ -195,6 +197,8 @@ services:
       KDS_PASSWORD: ${TOTEM_ADMIN_PASSWORD}
       INTEGRATION_KEY: ${FACE_SCANNER_API_KEY}
       PAYMENT_PROVIDER: ${TOTEM_FOOD_PAYMENT_PROVIDER:-mock}
+      PAYMENT_GATEWAY_URL: http://api-payment:3090
+      PAYMENT_GATEWAY_API_KEY: ${PAYMENT_API_KEY}
       FISCAL_PROVIDER: ${TOTEM_FOOD_FISCAL_PROVIDER:-mock}
       FISCAL_PROVIDER_URL: ${TOTEM_FOOD_FISCAL_PROVIDER_URL:-}
       FISCAL_PROVIDER_TOKEN: ${TOTEM_FOOD_FISCAL_PROVIDER_TOKEN:-}
@@ -212,10 +216,84 @@ services:
         condition: service_healthy
       totem-food-db-init:
         condition: service_completed_successfully
+      api-payment:
+        condition: service_healthy
     networks:
       - backend
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3088/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 30s
+    logging: *default-logging
+
+  api-payment-db-init:
+    image: ${MYSQL_IMAGE:-mysql:8.4.11}
+    restart: "no"
+    env_file: .env
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - backend
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS api_pagamento CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL PRIVILEGES ON api_pagamento.* TO '$$MYSQL_USER'@'%'; FLUSH PRIVILEGES;"
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+
+  api-payment:
+    build:
+      context: ./modules/api_pagamento
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 3090
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: api_pagamento
+      DB_USER: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+      PAYMENT_API_KEY: ${PAYMENT_API_KEY}
+      PAYMENT_PROVIDER_CASH: ${PAYMENT_PROVIDER_CASH:-cash}
+      PAYMENT_PROVIDER_PIX: ${PAYMENT_PROVIDER_PIX:-mock}
+      PAYMENT_PROVIDER_DEBIT: ${PAYMENT_PROVIDER_DEBIT:-mock}
+      PAYMENT_PROVIDER_CREDIT: ${PAYMENT_PROVIDER_CREDIT:-mock}
+      PAYMENT_MOCK_AUTO_APPROVE: ${PAYMENT_MOCK_AUTO_APPROVE:-true}
+      PAYMENT_MOCK_WEBHOOK_SECRET: ${PAYMENT_MOCK_WEBHOOK_SECRET:-}
+      PAYMENT_GETNET_BRIDGE_URL: ${PAYMENT_GETNET_BRIDGE_URL:-}
+      PAYMENT_GETNET_BRIDGE_TOKEN: ${PAYMENT_GETNET_BRIDGE_TOKEN:-}
+      PAYMENT_GETNET_WEBHOOK_SECRET: ${PAYMENT_GETNET_WEBHOOK_SECRET:-}
+      PAYMENT_REDE_BRIDGE_URL: ${PAYMENT_REDE_BRIDGE_URL:-}
+      PAYMENT_REDE_BRIDGE_TOKEN: ${PAYMENT_REDE_BRIDGE_TOKEN:-}
+      PAYMENT_REDE_WEBHOOK_SECRET: ${PAYMENT_REDE_WEBHOOK_SECRET:-}
+      PAYMENT_PAGBANK_BRIDGE_URL: ${PAYMENT_PAGBANK_BRIDGE_URL:-}
+      PAYMENT_PAGBANK_BRIDGE_TOKEN: ${PAYMENT_PAGBANK_BRIDGE_TOKEN:-}
+      PAYMENT_PAGBANK_WEBHOOK_SECRET: ${PAYMENT_PAGBANK_WEBHOOK_SECRET:-}
+      BACKOFFICE_WEBHOOK_URL: ${PAYMENT_BACKOFFICE_WEBHOOK_URL:-}
+      BACKOFFICE_WEBHOOK_SECRET: ${PAYMENT_BACKOFFICE_WEBHOOK_SECRET:-}
+      OUTBOX_POLL_MS: ${PAYMENT_OUTBOX_POLL_MS:-5000}
+      OUTBOX_MAX_ATTEMPTS: ${PAYMENT_OUTBOX_MAX_ATTEMPTS:-20}
+      HTTP_TIMEOUT_MS: ${PAYMENT_HTTP_TIMEOUT_MS:-15000}
+      TZ: ${TZ:-America/Sao_Paulo}
+    expose:
+      - "3090"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      api-payment-db-init:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
