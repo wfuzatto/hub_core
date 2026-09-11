@@ -82,7 +82,9 @@ done
 COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml -f compose.face-real-test.yml)
 "${COMPOSE[@]}" config >/dev/null
 
-ARGS=(--host-edge)
+# Este script já atualizou o hub_core acima. Evita um segundo git fetch dentro
+# de update.sh, que além de ser redundante pode pedir a passphrase SSH novamente.
+ARGS=(--no-pull --host-edge)
 if [[ "${USE_GPU:-0}" == "1" ]]; then
   ARGS+=(--gpu)
 fi
