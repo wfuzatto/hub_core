@@ -34,6 +34,7 @@ services:
 
   api-payment:
     environment:
+      PAYMENT_API_KEY: ${PAYMENT_TEF_TEST_API_KEY:-tef-test-api-key}
       PAYMENT_PROVIDER_DEBIT: tef
       PAYMENT_PROVIDER_CREDIT: tef
       PAYMENT_TEF_AGENT_URL: http://tef-agent:8766
@@ -49,6 +50,7 @@ services:
 
   totem-food:
     environment:
+      PAYMENT_GATEWAY_API_KEY: ${PAYMENT_TEF_TEST_API_KEY:-tef-test-api-key}
       PAYMENT_TERMINAL_ID: ${PAYMENT_TEF_DEFAULT_TERMINAL_ID:-TEF-DOCKER-01}
 
 volumes:
