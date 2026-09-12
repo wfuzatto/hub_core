@@ -44,4 +44,10 @@ if __name__ == '__main__':
         print('ERRO: ' + error, file=sys.stderr)
     if errors:
         sys.exit(1)
-    print('NFC: configuração efetiva validada; provider=' + env.get('HOTEL_CARD_PROVIDER', 'bis_api'))
+    confirmation = str(env.get('BIS_API_WRITE_CONFIRMATION') or '')
+    url = str(env.get('BIS_API_URL') or '')
+    print('NFC: configuração efetiva validada')
+    print('provider=' + env.get('HOTEL_CARD_PROVIDER', 'bis_api'))
+    print('bis_api_url=' + url)
+    print('confirmation_configured=' + str(bool(confirmation)).lower())
+    print('confirmation_length=' + str(len(confirmation)))

@@ -138,6 +138,13 @@ if [[ "$OK" != "1" ]]; then
   exit 1
 fi
 
+if [[ "$MODULE" == "totem_autoatendimento" ]]; then
+  STATUS_JSON="$(curl -fsS "http://127.0.0.1:${TOTEM_LOCAL_PORT:-3080}/api/access-control/status")" || fail "access-control/status indisponível"
+  printf '%s' "$STATUS_JSON" | python3 scripts/check_totem_nfc.py
+  CARD_JSON="$(curl -fsS "http://127.0.0.1:${TOTEM_LOCAL_PORT:-3080}/api/access-control/card-status")" || fail "access-control/card-status indisponível"
+  printf '%s' "$CARD_JSON" | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get("provider")=="bis_api"; print("card-status: provider=bis_api, card_present=" + str(d.get("present", "not_required")))'
+fi
+
 log "Atualização isolada concluída"
 "${COMPOSE[@]}" ps "$SERVICE"
 echo "Health: $HEALTH_URL"
