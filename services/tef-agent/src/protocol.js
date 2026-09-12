@@ -1,5 +1,0 @@
-'use strict';
-
-const ACTIVE = new Set(['QUEUED','WAITING_CARD','CARD_READ','WAITING_PIN','PROCESSING','AUTHORIZED']);
-const TERMINAL = new Set(['APPROVED','DECLINED','CANCELED','ERROR','REFUNDED']);
-module.exports = { ACTIVE, TERMINAL };
