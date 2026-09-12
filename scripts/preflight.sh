@@ -150,5 +150,6 @@ fi
 
 "${COMPOSE[@]}" config >/dev/null
 "${COMPOSE[@]}" config --format json | python3 scripts/validate_nfc.py
+python3 scripts/preflight_tef.py
 
 echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU banco_pms=hotel_reservas banco_food=totem_food banco_pagamentos=api_pagamento"

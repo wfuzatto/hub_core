@@ -1,0 +1,1 @@
+The TEF agent source in this directory contains no proprietary SiTef/GerTEF binaries, cryptographic keys or vendor credentials. Vendor libraries must be obtained through the authorized TEF integrator and must not be committed to this repository.

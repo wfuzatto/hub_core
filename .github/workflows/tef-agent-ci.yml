@@ -1,0 +1,40 @@
+name: TEF Agent CI
+on:
+  push:
+    branches: ["feat/tef-agent-integration"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  agent:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile
+        run: |
+          python -m py_compile services/tef_agent/tef_agent.py
+          python -m py_compile services/tef_agent/test_tef_agent.py
+          python -m py_compile services/tef_agent/scripts/test_mock.py
+          python -m py_compile scripts/preflight_tef.py
+      - name: Unit tests
+        working-directory: services/tef_agent
+        run: python -m unittest -v test_tef_agent.py
+      - name: Start mock agent and run HTTP smoke test
+        shell: bash
+        run: |
+          export TEF_AGENT_HOST=127.0.0.1
+          export TEF_AGENT_PORT=8766
+          export TEF_AGENT_TOKEN=CI_TEST_TOKEN
+          export TEF_DRIVER=mock
+          export TEF_DEFAULT_TERMINAL_ID=PPC930-FOOD-01
+          export TEF_DB_PATH="$RUNNER_TEMP/tef_agent.sqlite3"
+          python services/tef_agent/tef_agent.py >"$RUNNER_TEMP/tef-agent.log" 2>&1 &
+          PID=$!
+          trap 'kill $PID 2>/dev/null || true' EXIT
+          sleep 2
+          TEF_AGENT_URL=http://127.0.0.1:8766 TEF_AGENT_TOKEN=CI_TEST_TOKEN TEF_DEFAULT_TERMINAL_ID=PPC930-FOOD-01 python services/tef_agent/scripts/test_mock.py
+      - name: Disabled preflight is safe by default
+        run: TEF_ENABLED=false python scripts/preflight_tef.py
