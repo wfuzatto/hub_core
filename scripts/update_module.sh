@@ -74,6 +74,9 @@ git -C "$MODULE_DIR" checkout --detach "$REF"
 echo "HEAD $MODULE: $(git -C "$MODULE_DIR" rev-parse --short HEAD)"
 
 COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml)
+if [[ "$MODULE" == "totem_autoatendimento" && -f compose.nfc-bis.yml ]]; then
+  COMPOSE+=( -f compose.nfc-bis.yml )
+fi
 if [[ "$MODULE" == "face_scanner" && -f compose.face-real-test.yml ]]; then
   COMPOSE+=( -f compose.face-real-test.yml )
 fi
