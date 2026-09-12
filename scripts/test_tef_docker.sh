@@ -4,51 +4,63 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 LIST="$ROOT/modules/modules.list"
-COMPOSE=(docker compose -f compose.yml -f compose.tef-test.yml)
+TEST_ROOT="$ROOT/.tef-test"
+COMPOSE=(docker compose -p hub_core_tef_test -f compose.tef-test.yml)
 
 fail(){ echo "ERRO: $*" >&2; exit 1; }
 log(){ printf '\n[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"; }
 
-[[ -f .env ]] || fail ".env ausente. Use o .env normal do HUB; o override TEF usa credenciais próprias de teste."
 [[ -f "$LIST" ]] || fail "modules/modules.list ausente"
 command -v git >/dev/null 2>&1 || fail "git não encontrado"
 command -v docker >/dev/null 2>&1 || fail "docker não encontrado"
 command -v curl >/dev/null 2>&1 || fail "curl não encontrado"
+docker compose version >/dev/null 2>&1 || fail "docker compose não encontrado"
 
 diagnostics(){
   echo
   echo "================ TEF TEST DIAGNOSTICS ================" >&2
   "${COMPOSE[@]}" ps >&2 || true
-  "${COMPOSE[@]}" logs --tail=180 tef-agent api-payment >&2 || true
+  "${COMPOSE[@]}" logs --tail=180 tef-agent api-payment mysql >&2 || true
 }
 trap diagnostics ERR
 
-sync_module(){
+sync_test_module(){
   local module="$1" line dest repo ref dir
   line="$(awk -F'|' -v m="$module" '$1==m {print; exit}' "$LIST")"
   [[ -n "$line" ]] || fail "módulo $module não encontrado em modules.list"
   IFS='|' read -r dest repo ref <<< "$line"
-  dir="$ROOT/modules/$dest"
+  [[ -n "$repo" && -n "$ref" ]] || fail "entrada inválida para $module em modules.list"
+  dir="$TEST_ROOT/$dest"
+  mkdir -p "$TEST_ROOT"
   if [[ ! -d "$dir/.git" ]]; then
     rm -rf "$dir"
     git clone "$repo" "$dir"
   fi
   if [[ -n "$(git -C "$dir" status --porcelain)" ]]; then
-    git -C "$dir" status --short >&2
-    fail "$module possui alterações locais; teste não sobrescreveu nada"
+    rm -rf "$dir"
+    git clone "$repo" "$dir"
   fi
   git -C "$dir" fetch --prune origin
   git -C "$dir" fetch origin "$ref" >/dev/null 2>&1 || true
   git -C "$dir" cat-file -e "${ref}^{commit}" 2>/dev/null || fail "ref $ref não encontrada para $module"
-  git -C "$dir" checkout --detach "$ref"
-  echo "$module -> $(git -C "$dir" rev-parse --short HEAD)"
+  git -C "$dir" checkout --detach "$ref" >/dev/null
+  echo "$module (lab) -> $(git -C "$dir" rev-parse --short HEAD)"
 }
 
-log "Sincronizando commits TEF fixados"
-sync_module api_pagamento
-sync_module totem_food
+log "Preparando checkouts isolados do laboratório"
+sync_test_module api_pagamento
+sync_test_module totem_food
 
-log "Validando Compose TEF"
+log "Validando alterações do Totem Food sem tocar no container oficial"
+docker run --rm -v "$TEST_ROOT/totem_food:/app:ro" -w /app node:22-alpine \
+  sh -ec 'node --check src/config.js && node --check src/payment.js && node --check src/order-service.js'
+
+log "Recriando somente o projeto Docker isolado hub_core_tef_test"
+# Este projeto/volumes têm nomes exclusivos do laboratório. Nenhum container ou
+# volume do projeto oficial hub_core é referenciado por este comando.
+"${COMPOSE[@]}" down -v --remove-orphans >/dev/null 2>&1 || true
+
+log "Validando Compose TEF isolado"
 "${COMPOSE[@]}" config >/dev/null
 
 log "Build do agente e gateway"
@@ -60,19 +72,25 @@ log "Teste unitário do agente mock"
 log "Validação sintática da API Pagamento"
 "${COMPOSE[@]}" run --rm --no-deps api-payment npm run check
 
-log "Subindo MySQL + API Pagamento + TEF Agent"
-"${COMPOSE[@]}" up -d --build tef-agent api-payment
+log "Testes unitários da API Pagamento"
+"${COMPOSE[@]}" run --rm --no-deps api-payment npm test
+
+log "Subindo MySQL + API Pagamento + TEF Agent isolados"
+"${COMPOSE[@]}" up -d --build mysql tef-agent api-payment
 
 log "Aguardando healthchecks"
+READY=0
 for _ in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:${TEF_AGENT_LOCAL_PORT:-8766}/health" >/dev/null 2>&1 \
-    && curl -fsS "http://127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-3090}/health" >/dev/null 2>&1; then
+  if curl -fsS "http://127.0.0.1:${TEF_AGENT_LOCAL_PORT:-18766}/health" >/dev/null 2>&1 \
+    && curl -fsS "http://127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-13090}/health" >/dev/null 2>&1; then
+    READY=1
     break
   fi
   sleep 2
 done
-curl -fsS "http://127.0.0.1:${TEF_AGENT_LOCAL_PORT:-8766}/health"; echo
-curl -fsS "http://127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-3090}/health"; echo
+[[ "$READY" == "1" ]] || fail "healthchecks do laboratório TEF não ficaram prontos"
+curl -fsS "http://127.0.0.1:${TEF_AGENT_LOCAL_PORT:-18766}/health"; echo
+curl -fsS "http://127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-13090}/health"; echo
 
 log "Teste E2E: idempotência, serialização do terminal, AUTHORIZED e CONFIRM"
 "${COMPOSE[@]}" exec -T api-payment node <<'NODE'
@@ -126,7 +144,7 @@ async function confirm(id){return request(`/api/v1/payment-intents/${encodeURICo
   const approvedA=await confirm(a.id);
   if(approvedA.status!=='APPROVED')throw new Error(`confirm A retornou ${approvedA.status}`);
 
-  const authB=await waitFor(b.id,'AUTHORIZED',45000);
+  await waitFor(b.id,'AUTHORIZED',45000);
   const approvedB=await confirm(b.id);
   if(approvedB.status!=='APPROVED')throw new Error(`confirm B retornou ${approvedB.status}`);
 
@@ -134,18 +152,25 @@ async function confirm(id){return request(`/api/v1/payment-intents/${encodeURICo
   const eventStatuses=(eventsA.events||[]).map(e=>e.to_status);
   if(!eventStatuses.includes('AUTHORIZED')||!eventStatuses.includes('APPROVED'))throw new Error(`eventos A incompletos: ${eventStatuses.join(',')}`);
 
+  const providers=await request('/api/v1/providers');
+  const tef=(providers.providers||[]).find(p=>p.name==='tef');
+  if(!tef?.configured||!tef?.confirmation)throw new Error(`provider TEF não está pronto: ${JSON.stringify(tef)}`);
+
   console.log(JSON.stringify({
     result:'PASS',terminal,
     payment_a:{id:a.id,status:approvedA.status},
     payment_b:{id:b.id,status:approvedB.status},
     second_payment_while_busy:bWhileBusy.status,
-    events_a:eventStatuses
+    events_a:eventStatuses,
+    provider_tef:tef
   },null,2));
 })().catch(error=>{console.error(error);process.exit(1)});
 NODE
 
 log "TEF Docker V1 passou"
-echo "Agente:    http://127.0.0.1:${TEF_AGENT_LOCAL_PORT:-8766}/health"
-echo "Gateway:   http://127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-3090}/health"
-echo "Containers foram mantidos no ar para inspeção."
-echo "Para encerrar somente o teste: docker compose -f compose.yml -f compose.tef-test.yml stop tef-agent api-payment"
+echo "Projeto Docker isolado: hub_core_tef_test"
+echo "Agente:  http://127.0.0.1:${TEF_AGENT_LOCAL_PORT:-18766}/health"
+echo "Gateway: http://127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-13090}/health"
+echo "Containers do laboratório foram mantidos no ar para inspeção."
+echo "Encerrar laboratório: docker compose -p hub_core_tef_test -f compose.tef-test.yml stop"
+echo "Remover laboratório e seus volumes: docker compose -p hub_core_tef_test -f compose.tef-test.yml down -v"
