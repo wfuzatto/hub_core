@@ -73,7 +73,8 @@ log "Validação sintática da API Pagamento"
 "${COMPOSE[@]}" run --rm --no-deps api-payment npm run check
 
 log "Testes unitários da API Pagamento"
-"${COMPOSE[@]}" run --rm --no-deps api-payment npm test
+docker run --rm -v "$TEST_ROOT/api_pagamento:/app:ro" -w /app node:22-alpine \
+  sh -ec 'node --test test/*.test.js'
 
 log "Subindo MySQL + API Pagamento + TEF Agent isolados"
 "${COMPOSE[@]}" up -d --build mysql tef-agent api-payment
