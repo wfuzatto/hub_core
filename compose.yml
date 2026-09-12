@@ -122,7 +122,14 @@ services:
       DATA_DIR: /app/data
       UPLOAD_DIR: /app/data/uploads
       BRANDING_DIR: /app/data/branding
-      PRINT_JOB_DIR: /app/data/print-jobs
+        PRINT_JOB_DIR: /app/data/print-jobs
+        HOTEL_CARD_PROVIDER: ${HOTEL_CARD_PROVIDER:-bis_api}
+        BIS_API_URL: ${BIS_API_URL:-}
+        BIS_API_WRITE_CONFIRMATION: ${BIS_API_WRITE_CONFIRMATION:-}
+        BIS_API_TIMEOUT_MS: ${BIS_API_TIMEOUT_MS:-15000}
+        HOTEL_ACCESS_CHECKIN_TIME: ${HOTEL_ACCESS_CHECKIN_TIME:-}
+        HOTEL_ACCESS_CHECKOUT_TIME: ${HOTEL_ACCESS_CHECKOUT_TIME:-}
+        HOTEL_ACCESS_UTC_OFFSET: ${HOTEL_ACCESS_UTC_OFFSET:-}
       FACE_SCANNER_URL: http://face-scanner:8091
       FACE_SCANNER_API_KEY: ${FACE_SCANNER_API_KEY}
       PAYMENT_GATEWAY_URL: http://api-payment:3090

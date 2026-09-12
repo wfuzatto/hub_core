@@ -41,6 +41,19 @@ case "$MODULE" in
   *) fail "módulo inválido: $MODULE" ;;
 esac
 
+# Use the same effective overlays as the full deployment, before changing checkout/container.
+COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml)
+if [[ "$MODULE" == "totem_autoatendimento" || "$MODULE" == "face_scanner" ]]; then
+  [[ ! -f compose.face-real-test.yml ]] || COMPOSE+=( -f compose.face-real-test.yml )
+fi
+if [[ "$MODULE" == "totem_autoatendimento" ]]; then
+  [[ -f compose.nfc-bis.yml ]] || fail "compose.nfc-bis.yml ausente"
+  COMPOSE+=( -f compose.nfc-bis.yml )
+  command -v python3 >/dev/null 2>&1 || fail "python3 necessário para validar NFC"
+  "${COMPOSE[@]}" config --format json | python3 scripts/validate_nfc.py
+fi
+"${COMPOSE[@]}" config >/dev/null
+
 LINE="$(awk -F'|' -v m="$MODULE" '$1==m {print; exit}' "$LIST")"
 [[ -n "$LINE" ]] || fail "módulo $MODULE não encontrado em modules/modules.list"
 IFS='|' read -r DEST REPO REF <<< "$LINE"
@@ -72,16 +85,6 @@ git -C "$MODULE_DIR" cat-file -e "${REF}^{commit}" 2>/dev/null || fail "ref $REF
 git -C "$MODULE_DIR" checkout --detach "$REF"
 
 echo "HEAD $MODULE: $(git -C "$MODULE_DIR" rev-parse --short HEAD)"
-
-COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml)
-if [[ "$MODULE" == "totem_autoatendimento" && -f compose.nfc-bis.yml ]]; then
-  COMPOSE+=( -f compose.nfc-bis.yml )
-fi
-if [[ "$MODULE" == "face_scanner" && -f compose.face-real-test.yml ]]; then
-  COMPOSE+=( -f compose.face-real-test.yml )
-fi
-
-"${COMPOSE[@]}" config >/dev/null
 
 if [[ "$MODULE" == "totem_food" ]]; then
   log "Preparando apenas dependências próprias do Totem Food"

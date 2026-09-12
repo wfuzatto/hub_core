@@ -80,6 +80,7 @@ done
 # Os overrides precisam ser os mesmos usados por scripts/update.sh.
 COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml -f compose.face-real-test.yml -f compose.nfc-bis.yml)
 "${COMPOSE[@]}" config >/dev/null
+"${COMPOSE[@]}" config --format json | python3 scripts/validate_nfc.py
 
 # Este script já atualizou o hub_core acima. Evita um segundo git fetch dentro
 # de update.sh, que além de ser redundante pode pedir a passphrase SSH novamente.

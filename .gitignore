@@ -6,3 +6,5 @@ modules/*
 !modules/.gitkeep
 *.log
 .DS_Store
+__pycache__/
+.env.nfc-*

@@ -27,7 +27,7 @@ if [[ ! -f .env ]]; then
 fi
 
 HOTEL_CARD_PROVIDER_VALUE="$(grep -E '^HOTEL_CARD_PROVIDER=' .env | tail -1 | cut -d= -f2- || true)"
-HOTEL_CARD_PROVIDER_VALUE="${HOTEL_CARD_PROVIDER_VALUE:-mock}"
+HOTEL_CARD_PROVIDER_VALUE="${HOTEL_CARD_PROVIDER_VALUE:-bis_api}"
 BIS_API_URL_VALUE="$(grep -E '^BIS_API_URL=' .env | tail -1 | cut -d= -f2- || true)"
 
 if [[ "$SKIP_PULL" -eq 0 ]]; then

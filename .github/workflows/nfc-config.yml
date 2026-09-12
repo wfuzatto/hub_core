@@ -1,0 +1,20 @@
+name: NFC deployment configuration
+on:
+  push:
+  pull_request:
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -m unittest discover -s tests -p 'test_nfc_config.py'
+      - run: bash -n scripts/update_module.sh scripts/preflight.sh scripts/update_docker.sh
+      - name: Validate effective Compose configuration without printing secrets
+        env:
+          HOTEL_CARD_PROVIDER: bis_api
+          BIS_API_URL: http://192.0.2.20:8765
+          BIS_API_WRITE_CONFIRMATION: TEST_ONLY
+          HOTEL_ACCESS_CHECKIN_TIME: '14:00'
+          HOTEL_ACCESS_CHECKOUT_TIME: '12:00'
+          HOTEL_ACCESS_UTC_OFFSET: '-03:00'
+        run: docker compose --env-file .env.example -f compose.yml -f compose.host-edge.yml -f compose.face-real-test.yml -f compose.nfc-bis.yml config --format json | python3 scripts/validate_nfc.py

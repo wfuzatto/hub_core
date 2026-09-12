@@ -61,44 +61,7 @@ else
     fail=1
   fi
 
-  HOTEL_CARD_PROVIDER_VALUE="$(read_env HOTEL_CARD_PROVIDER)"
-  HOTEL_CARD_PROVIDER_VALUE="${HOTEL_CARD_PROVIDER_VALUE:-mock}"
-  if [[ "$HOTEL_CARD_PROVIDER_VALUE" != "mock" && "$HOTEL_CARD_PROVIDER_VALUE" != "bis_api" ]]; then
-    echo "ERRO: HOTEL_CARD_PROVIDER deve ser mock ou bis_api"
-    fail=1
-  fi
-
-  if [[ "$HOTEL_CARD_PROVIDER_VALUE" == "bis_api" ]]; then
-    for key in BIS_API_URL BIS_API_WRITE_CONFIRMATION HOTEL_ACCESS_CHECKIN_TIME HOTEL_ACCESS_CHECKOUT_TIME HOTEL_ACCESS_UTC_OFFSET; do
-      value="$(read_env "$key")"
-      if [[ -z "$value" ]]; then
-        echo "ERRO: $key é obrigatório quando HOTEL_CARD_PROVIDER=bis_api"
-        fail=1
-      fi
-    done
-
-    BIS_API_URL_VALUE="$(read_env BIS_API_URL)"
-    CHECKIN_TIME_VALUE="$(read_env HOTEL_ACCESS_CHECKIN_TIME)"
-    CHECKOUT_TIME_VALUE="$(read_env HOTEL_ACCESS_CHECKOUT_TIME)"
-    UTC_OFFSET_VALUE="$(read_env HOTEL_ACCESS_UTC_OFFSET)"
-
-    if [[ -n "$BIS_API_URL_VALUE" && ! "$BIS_API_URL_VALUE" =~ ^https?://[^[:space:]]+$ ]]; then
-      echo "ERRO: BIS_API_URL deve começar com http:// ou https://"
-      fail=1
-    fi
-    if [[ -n "$CHECKIN_TIME_VALUE" && ! "$CHECKIN_TIME_VALUE" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
-      echo "ERRO: HOTEL_ACCESS_CHECKIN_TIME deve usar HH:MM"
-      fail=1
-    fi
-    if [[ -n "$CHECKOUT_TIME_VALUE" && ! "$CHECKOUT_TIME_VALUE" =~ ^([01][0-9]|2[0-3]):[0-5][0-9]$ ]]; then
-      echo "ERRO: HOTEL_ACCESS_CHECKOUT_TIME deve usar HH:MM"
-      fail=1
-    fi
-    if [[ -n "$UTC_OFFSET_VALUE" && ! "$UTC_OFFSET_VALUE" =~ ^(Z|[+-]([01][0-9]|2[0-3]):[0-5][0-9])$ ]]; then
-      echo "ERRO: HOTEL_ACCESS_UTC_OFFSET deve usar Z ou ±HH:MM"
-      fail=1
-    fi
-  fi
+  # NFC is validated below from Docker Compose's resolved environment (including quotes/overrides).
 
   if [[ "$EDGE_MODE" == "docker" ]]; then
     if grep -Eq '^(HUB_DOMAIN|FACE_SCANNER_DOMAIN)=.*example\.com$' .env; then
@@ -186,5 +149,6 @@ if [[ "$USE_GPU" == "1" ]]; then
 fi
 
 "${COMPOSE[@]}" config >/dev/null
+"${COMPOSE[@]}" config --format json | python3 scripts/validate_nfc.py
 
-echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU nfc=${HOTEL_CARD_PROVIDER_VALUE:-mock} banco_pms=hotel_reservas banco_food=totem_food banco_pagamentos=api_pagamento"
+echo "Preflight OK. edge=$EDGE_MODE gpu=$USE_GPU banco_pms=hotel_reservas banco_food=totem_food banco_pagamentos=api_pagamento"
