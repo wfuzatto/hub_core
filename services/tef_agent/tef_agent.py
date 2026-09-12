@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Local TEF edge agent. Standard-library only; no real card data is ever accepted."""
 from __future__ import annotations
-import json, os, platform, re, secrets, sqlite3, subprocess, threading, time, uuid
+import json, os, platform, re, secrets, sqlite3, subprocess, time, uuid
 from datetime import datetime, timezone, timedelta
-from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
@@ -113,7 +112,9 @@ class Store:
                 terminal=c.execute("SELECT * FROM terminals WHERE terminal_id=?",(str(data['terminal_id']),)).fetchone()
             if terminal['active_transaction_id']:
                 active=c.execute("SELECT status FROM transactions WHERE id=?",(terminal['active_transaction_id'],)).fetchone()
-                if active and active['status'] not in TERMINAL: c.execute("ROLLBACK"); raise TefError('TEF_TERMINAL_BUSY','Terminal is busy',409)
+                if active and active['status'] not in TERMINAL:
+                    c.execute("ROLLBACK")
+                    raise TefError('TEF_TERMINAL_BUSY','Terminal is busy',409)
             c.execute("INSERT INTO transactions(id,payment_id,terminal_id,amount_cents,currency,method,installments,scenario,status,request_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
                       (txid,str(data['payment_id']),str(data['terminal_id']),amount,str(data.get('currency','BRL')),method,installments,scenario,'WAITING_CARD',req_hash,ts,ts))
             c.execute("UPDATE terminals SET status='BUSY',active_transaction_id=?,lease_until=?,heartbeat_at=?,updated_at=? WHERE terminal_id=?",(txid,lease,ts,ts,str(data['terminal_id'])))
@@ -125,7 +126,9 @@ class Store:
     def transition(self,txid,to,event,payload=None):
         with self.conn() as c:
             c.execute("BEGIN IMMEDIATE"); row=c.execute("SELECT * FROM transactions WHERE id=?",(txid,)).fetchone()
-            if not row: c.execute("ROLLBACK"); raise TefError('TRANSACTION_NOT_FOUND','Transaction not found',404)
+            if not row:
+                c.execute("ROLLBACK")
+                raise TefError('TRANSACTION_NOT_FOUND','Transaction not found',404)
             frm=row['status']; fields=["status=?","updated_at=?"]; args=[to,now()]
             if to=='AUTHORIZED': fields += ["authorized_at=?","authorization_code=?","nsu=?","network=?","brand=?"]; args += [now(),f"AUTH{secrets.randbelow(999999):06d}",f"NSU{secrets.randbelow(999999999):09d}",'MOCK','MOCKCARD']
             if to=='APPROVED': fields += ["confirmed_at=?"]; args += [now()]
@@ -133,18 +136,19 @@ class Store:
             args.append(txid); c.execute(f"UPDATE transactions SET {','.join(fields)} WHERE id=?",args)
             self.event(c,txid,event,frm,to,payload)
             fresh=c.execute("SELECT * FROM transactions WHERE id=?",(txid,)).fetchone()
-            if to in TERMINAL: self._release(c,fresh); c.execute("UPDATE recovery_journal SET resolved=1,resolved_at=? WHERE transaction_id=? AND resolved=0",(now(),txid))
+            if to in TERMINAL:
+                self._release(c,fresh)
+                c.execute("UPDATE recovery_journal SET resolved=1,resolved_at=? WHERE transaction_id=? AND resolved=0",(now(),txid))
             c.execute("COMMIT"); return dict(fresh)
     def advance_mock(self,row):
         if row['status'] not in INTERACTIVE: return row
         age=time.time()-datetime.fromisoformat(row['created_at']).timestamp(); scenario=row['scenario']
         if scenario=='timeout' and age>=5: return self.transition(row['id'],'ERROR','mock.timeout')
         if scenario in {'communication_error','disconnect'} and age>=2: return self.transition(row['id'],'ERROR',f'mock.{scenario}')
-        stages=[(1,'CARD_READ'),(2,'WAITING_PIN'),(3,'PROCESSING')]
-        for sec,state in reversed(stages):
-            if age>=sec and row['status']!=state and row['status'] in INTERACTIVE: return self.transition(row['id'],state,'mock.progress')
-        if age>=4:
-            return self.transition(row['id'],'DECLINED' if scenario=='decline' else 'AUTHORIZED','mock.authorization')
+        if age>=4: return self.transition(row['id'],'DECLINED' if scenario=='decline' else 'AUTHORIZED','mock.authorization')
+        if age>=3 and row['status']!='PROCESSING': return self.transition(row['id'],'PROCESSING','mock.progress')
+        if age>=2 and row['status'] not in {'WAITING_PIN','PROCESSING'}: return self.transition(row['id'],'WAITING_PIN','mock.progress')
+        if age>=1 and row['status']=='WAITING_CARD': return self.transition(row['id'],'CARD_READ','mock.progress')
         return row
     def get(self,txid,advance=True):
         with self.conn() as c: row=c.execute("SELECT * FROM transactions WHERE id=?",(txid,)).fetchone()
@@ -206,8 +210,8 @@ class SitefDriver:
     @staticmethod
     def status():
         lib=os.getenv('SITEF_LIBRARY','')
-        return {'configured':bool(lib),'library':lib or None,'real_payments_enabled':env_bool('TEF_REAL_PAYMENTS_ENABLED',False),
-                'error':None if lib else 'SITEF_SDK_NOT_INSTALLED'}
+        return {'configured':bool(lib),'implemented':False,'library':lib or None,'real_payments_enabled':False,
+                'error':'SITEF_DRIVER_NOT_IMPLEMENTED' if lib else 'SITEF_SDK_NOT_INSTALLED'}
 
 class App:
     def __init__(self):
@@ -217,7 +221,7 @@ class App:
         self.store=Store(os.getenv('TEF_DB_PATH',str(Path(__file__).with_name('data')/'tef_agent.sqlite3')))
         hw=Hardware.discover(); device=(hw.get('devices') or [{}])[0].get('device') if isinstance((hw.get('devices') or [{}])[0],dict) else None
         self.store.ensure_terminal(self.default_terminal,hw.get('model'),device)
-    def health(self): return {'status':'ok','service':'tef_agent','driver':self.driver,'real_payments_enabled':env_bool('TEF_REAL_PAYMENTS_ENABLED',False),'time':now()}
+    def health(self): return {'status':'ok','service':'tef_agent','driver':self.driver,'real_payments_enabled':False if self.driver=='sitef' else env_bool('TEF_REAL_PAYMENTS_ENABLED',False),'time':now()}
     def status(self): return {'service':'tef_agent','driver':self.driver,'terminal_id':self.default_terminal,'device':Hardware.discover(),'sitef':SitefDriver.status(),'recovery_pending':len(self.store.list_recovery())}
 
 APP=App()
@@ -226,7 +230,7 @@ def public_tx(row):
     if not row: return row
     allowed=('id','payment_id','terminal_id','amount_cents','currency','method','installments','status','external_id','authorization_code','nsu','network','brand','receipt','created_at','updated_at','authorized_at','confirmed_at','canceled_at')
     out={k:row.get(k) for k in allowed if k in row}
-    if out.get('status') in INTERACTIVE|{'AUTHORIZED'}: out['next_action']={'type':'TERMINAL','state':out['status'],'terminal_id':out.get('terminal_id')}
+    if out.get('status') in INTERACTIVE|{'AUTHORIZED','RECOVERY_REQUIRED'}: out['next_action']={'type':'TERMINAL','state':out['status'],'terminal_id':out.get('terminal_id')}
     return out
 
 class Handler(BaseHTTPRequestHandler):
@@ -245,7 +249,7 @@ class Handler(BaseHTTPRequestHandler):
         supplied=self.headers.get('authorization','').removeprefix('Bearer ').strip() or self.headers.get('x-tef-agent-key','')
         if not secrets.compare_digest(str(supplied),str(APP.token)): raise TefError('UNAUTHORIZED','Unauthorized',401)
     def dashboard(self):
-        rows=APP.store.recent(); status=APP.status(); body=f"""<!doctype html><meta charset=utf-8><title>TEF Agent</title><style>body{{font:16px system-ui;max-width:1100px;margin:40px auto;padding:0 20px}}table{{border-collapse:collapse;width:100%}}td,th{{padding:8px;border-bottom:1px solid #ddd;text-align:left}}code{{background:#eee;padding:2px 5px}}</style><h1>TEF Agent</h1><p>Status: <b>ONLINE</b> · Driver: <b>{APP.driver.upper()}</b> · Real payments: <b>{'ENABLED' if env_bool('TEF_REAL_PAYMENTS_ENABLED') else 'DISABLED'}</b></p><p>Terminal: <code>{APP.default_terminal}</code> · PPC930 detected: <b>{'YES' if status['device']['detected'] else 'NO/UNKNOWN'}</b> · Recovery: {status['recovery_pending']}</p><p>SiTef SDK: <b>{'CONFIGURED' if status['sitef']['configured'] else 'NOT INSTALLED'}</b></p><h2>Recent transactions</h2><table><tr><th>ID</th><th>Payment</th><th>Terminal</th><th>Amount</th><th>Method</th><th>Status</th></tr>{''.join(f"<tr><td>{r['id'][:8]}</td><td>{r['payment_id']}</td><td>{r['terminal_id']}</td><td>R$ {r['amount_cents']/100:.2f}</td><td>{r['method']}</td><td>{r['status']}</td></tr>" for r in rows)}</table>""".encode()
+        rows=APP.store.recent(); status=APP.status(); body=f"""<!doctype html><meta charset=utf-8><title>TEF Agent</title><style>body{{font:16px system-ui;max-width:1100px;margin:40px auto;padding:0 20px}}table{{border-collapse:collapse;width:100%}}td,th{{padding:8px;border-bottom:1px solid #ddd;text-align:left}}code{{background:#eee;padding:2px 5px}}</style><h1>TEF Agent</h1><p>Status: <b>ONLINE</b> · Driver: <b>{APP.driver.upper()}</b> · Real payments: <b>{'ENABLED' if APP.health()['real_payments_enabled'] else 'DISABLED'}</b></p><p>Terminal: <code>{APP.default_terminal}</code> · PPC930 detected: <b>{'YES' if status['device']['detected'] else 'NO/UNKNOWN'}</b> · Recovery: {status['recovery_pending']}</p><p>SiTef SDK: <b>{'CONFIGURED' if status['sitef']['configured'] else 'NOT INSTALLED'}</b> · Driver native: <b>{'READY' if status['sitef']['implemented'] else 'NOT IMPLEMENTED'}</b></p><h2>Recent transactions</h2><table><tr><th>ID</th><th>Payment</th><th>Terminal</th><th>Amount</th><th>Method</th><th>Status</th></tr>{''.join(f"<tr><td>{r['id'][:8]}</td><td>{r['payment_id']}</td><td>{r['terminal_id']}</td><td>R$ {r['amount_cents']/100:.2f}</td><td>{r['method']}</td><td>{r['status']}</td></tr>" for r in rows)}</table>""".encode()
         self.send_response(200); self.send_header('content-type','text/html; charset=utf-8'); self.send_header('content-length',str(len(body))); self.end_headers(); self.wfile.write(body)
     def route(self,method):
         p=urlparse(self.path).path
@@ -257,7 +261,10 @@ class Handler(BaseHTTPRequestHandler):
         if p=='/v1/terminals' and method=='GET': return self.sendj(200,{'terminals':APP.store.list_terminals()})
         if p=='/v1/recovery/pending' and method=='GET': return self.sendj(200,{'transactions':APP.store.list_recovery()})
         if p=='/v1/transactions' and method=='POST':
-            if APP.driver=='sitef' and not env_bool('TEF_REAL_PAYMENTS_ENABLED'): raise TefError('TEF_REAL_PAYMENTS_DISABLED','Real TEF payments are disabled',503)
+            if APP.driver=='sitef':
+                if not env_bool('TEF_REAL_PAYMENTS_ENABLED'): raise TefError('TEF_REAL_PAYMENTS_DISABLED','Real TEF payments are disabled',503)
+                raise TefError('SITEF_DRIVER_NOT_IMPLEMENTED','Official SiTef native driver is not implemented yet',501)
+            if APP.driver!='mock': raise TefError('TEF_DRIVER_NOT_SUPPORTED',f'Unsupported TEF driver: {APP.driver}',503)
             return self.sendj(202,public_tx(APP.store.create(self.body())))
         m=re.fullmatch(r'/v1/transactions/([^/]+)(?:/(confirm|cancel|refund))?',p)
         if m:
@@ -279,5 +286,5 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e: print(safe_json({'ts':now(),'event':'error','error':type(e).__name__})); self.sendj(500,{'error':'INTERNAL_ERROR'})
 
 if __name__=='__main__':
-    print(safe_json({'event':'startup','host':APP.host,'port':APP.port,'driver':APP.driver,'terminal':APP.default_terminal,'real_payments_enabled':env_bool('TEF_REAL_PAYMENTS_ENABLED')}))
+    print(safe_json({'event':'startup','host':APP.host,'port':APP.port,'driver':APP.driver,'terminal':APP.default_terminal,'real_payments_enabled':APP.health()['real_payments_enabled']}))
     ThreadingHTTPServer((APP.host,APP.port),Handler).serve_forever()
