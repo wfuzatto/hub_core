@@ -76,10 +76,9 @@ for volume in "${REQUIRED_VOLUMES[@]}"; do
   fi
 done
 
-# O deploy oficial usa o provider biométrico interno SFace com os thresholds
-# homologados em compose.face-real-test.yml. Esse override precisa vir depois
-# do host-edge, que mantém um mock apenas como fallback de arquivo isolado.
-COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml -f compose.face-real-test.yml)
+# O deploy oficial usa o provider biométrico interno SFace e o overlay NFC/BIS.
+# Os overrides precisam ser os mesmos usados por scripts/update.sh.
+COMPOSE=(docker compose -f compose.yml -f compose.host-edge.yml -f compose.face-real-test.yml -f compose.nfc-bis.yml)
 "${COMPOSE[@]}" config >/dev/null
 
 # Este script já atualizou o hub_core acima. Evita um segundo git fetch dentro
@@ -111,6 +110,18 @@ printf '\n'
 echo "[test] Totem Hotel"
 curl -fsS "http://127.0.0.1:${TOTEM_LOCAL_PORT:-3080}/api/health"
 printf '\n'
+
+HOTEL_CARD_PROVIDER_VALUE="$(grep -E '^HOTEL_CARD_PROVIDER=' .env | tail -1 | cut -d= -f2- || true)"
+HOTEL_CARD_PROVIDER_VALUE="${HOTEL_CARD_PROVIDER_VALUE:-mock}"
+if [[ "$HOTEL_CARD_PROVIDER_VALUE" == "bis_api" ]]; then
+  echo "[test] NFC / BIS API via backend do Totem"
+  NFC_STATUS="$(curl -fsS "http://127.0.0.1:${TOTEM_LOCAL_PORT:-3080}/api/access-control/status" || true)"
+  if [[ -z "$NFC_STATUS" ]]; then
+    echo "AVISO: não foi possível consultar o status do bis_api pelo Totem." >&2
+  else
+    echo "$NFC_STATUS"
+  fi
+fi
 
 echo "[test] Totem Food"
 curl -fsS "http://127.0.0.1:${TOTEM_FOOD_LOCAL_PORT:-3085}/api/health"
