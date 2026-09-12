@@ -67,7 +67,7 @@ function createMockDriver({ config, store, callback }) {
   }
 
   async function start(input) {
-    const existing = Object.values(store.all()).find(tx => tx.payment_id === input.payment_id);
+    const existing = store.all().find(tx => tx.payment_id === input.payment_id);
     if (existing) return existing;
     const sessionId = crypto.randomUUID();
     if (!store.acquire(sessionId)) {
@@ -95,7 +95,10 @@ function createMockDriver({ config, store, callback }) {
   async function confirm(sessionId) {
     const tx = store.get(sessionId);
     if (!tx) throw Object.assign(new Error('Transaction not found'), { code: 'NOT_FOUND', status: 404 });
-    if (tx.status === 'APPROVED') return tx;
+    if (tx.status === 'APPROVED') {
+      store.release(sessionId);
+      return tx;
+    }
     if (tx.status !== 'AUTHORIZED') throw Object.assign(new Error(`Cannot confirm in ${tx.status}`), { code: 'INVALID_STATE', status: 409 });
     await emit(tx, 'APPROVED', { confirmed_at: now() });
     store.release(sessionId);
@@ -105,7 +108,10 @@ function createMockDriver({ config, store, callback }) {
   async function cancel(sessionId) {
     const tx = store.get(sessionId);
     if (!tx) throw Object.assign(new Error('Transaction not found'), { code: 'NOT_FOUND', status: 404 });
-    if (tx.status === 'CANCELED') return tx;
+    if (tx.status === 'CANCELED') {
+      store.release(sessionId);
+      return tx;
+    }
     if (['APPROVED','REFUNDED'].includes(tx.status)) throw Object.assign(new Error(`Cannot cancel in ${tx.status}`), { code: 'INVALID_STATE', status: 409 });
     await emit(tx, 'CANCELED', { canceled_at: now() });
     store.release(sessionId);
@@ -122,11 +128,20 @@ function createMockDriver({ config, store, callback }) {
   }
 
   function recover() {
-    for (const tx of store.all()) {
-      if (['QUEUED','WAITING_CARD','CARD_READ','WAITING_PIN'].includes(tx.status)) {
-        store.acquire(tx.session_id);
-        setImmediate(() => run(tx.session_id));
+    const terminalState = store.terminal();
+    const busySessionId = terminalState.busy_session_id;
+    if (busySessionId) {
+      const busy = store.get(busySessionId);
+      if (!busy || ['APPROVED','DECLINED','CANCELED','ERROR','REFUNDED'].includes(busy.status)) {
+        store.release(busySessionId);
       }
+    }
+    for (const tx of store.all()) {
+      if (['QUEUED','WAITING_CARD','CARD_READ','WAITING_PIN','PROCESSING'].includes(tx.status)) {
+        if (store.acquire(tx.session_id)) setImmediate(() => run(tx.session_id));
+      }
+      // AUTHORIZED deliberately remains locked until the orchestrator confirms
+      // or cancels it after reconciling the business transaction.
     }
   }
 
