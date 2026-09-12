@@ -52,7 +52,7 @@ services:
 
   api-payment:
     build:
-      context: ./modules/api_pagamento
+      context: ${TEF_TEST_API_CONTEXT:-./.tef-test/api_pagamento}
     restart: unless-stopped
     init: true
     environment:
