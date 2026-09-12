@@ -5,12 +5,11 @@ const config = require('./config');
 const { createStore } = require('./store');
 const { createCallback } = require('./callback');
 const { requireToken } = require('./security');
-const { createMockDriver } = require('./drivers/mock');
+const { createDriver } = require('./drivers');
 
 const store = createStore(config.dataDir);
 const callback = createCallback(config);
-if (config.driver !== 'mock') throw new Error(`Unsupported TEF driver in this build: ${config.driver}`);
-const driver = createMockDriver({ config, store, callback });
+const driver = createDriver({ config, store, callback });
 
 function json(res, status, data) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -43,7 +42,7 @@ async function handle(req, res) {
   if (!requireToken(req, res, config.token)) return;
 
   if (req.method === 'GET' && url.pathname === '/v1/device') {
-    return json(res, 200, { terminal_id: config.terminalId, driver: driver.name, transport: config.driver === 'mock' ? 'virtual' : 'unknown', online: true });
+    return json(res, 200, { terminal_id: config.terminalId, driver: driver.name, transport: config.driver === 'mock' ? 'virtual' : 'vendor-sdk', online: true });
   }
   if (req.method === 'GET' && url.pathname === '/v1/status') {
     const terminal = store.terminal();
@@ -75,6 +74,7 @@ async function handle(req, res) {
     if (req.method === 'POST' && action === 'cancel') return json(res, 200, await driver.cancel(sessionId));
     if (req.method === 'POST' && action === 'refund') {
       const input = await body(req);
+      validateNoCardData(input);
       const amount = Number(input.amount_cents);
       if (!Number.isSafeInteger(amount) || amount <= 0) return json(res, 422, { error: 'INVALID_AMOUNT' });
       return json(res, 200, await driver.refund(sessionId, amount));
