@@ -1,4 +1,23 @@
 services:
+  mysql:
+    image: ${MYSQL_IMAGE:-mysql:8.4.11}
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${TEF_TEST_MYSQL_ROOT_PASSWORD:-tef_test_root}
+      MYSQL_DATABASE: api_pagamento
+      MYSQL_USER: payment_test
+      MYSQL_PASSWORD: ${TEF_TEST_MYSQL_PASSWORD:-tef_test_password}
+      TZ: ${TZ:-America/Sao_Paulo}
+    volumes:
+      - tef_test_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    security_opt: ["no-new-privileges:true"]
+
   tef-agent:
     build:
       context: ./services/tef-agent
@@ -21,8 +40,7 @@ services:
     volumes:
       - tef_agent_data:/app/data
     ports:
-      - "127.0.0.1:${TEF_AGENT_LOCAL_PORT:-8766}:8766"
-    networks: [backend]
+      - "127.0.0.1:${TEF_AGENT_LOCAL_PORT:-18766}:8766"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8766/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -33,25 +51,52 @@ services:
     stop_grace_period: 10s
 
   api-payment:
+    build:
+      context: ./modules/api_pagamento
+    restart: unless-stopped
+    init: true
     environment:
+      NODE_ENV: production
+      PORT: 3090
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: api_pagamento
+      DB_USER: payment_test
+      DB_PASSWORD: ${TEF_TEST_MYSQL_PASSWORD:-tef_test_password}
       PAYMENT_API_KEY: ${PAYMENT_TEF_TEST_API_KEY:-tef-test-api-key}
+      PAYMENT_PROVIDER_CASH: cash
+      PAYMENT_PROVIDER_PIX: mock
       PAYMENT_PROVIDER_DEBIT: tef
       PAYMENT_PROVIDER_CREDIT: tef
+      PAYMENT_JOB_POLL_MS: 250
+      PAYMENT_JOB_CONCURRENCY: 8
+      PAYMENT_JOB_MAX_ATTEMPTS: 12
+      PAYMENT_JOB_STALE_SECONDS: 120
+      PAYMENT_JOB_MAX_BACKOFF_SECONDS: 30
       PAYMENT_TEF_AGENT_URL: http://tef-agent:8766
       PAYMENT_TEF_AGENT_TOKEN: ${PAYMENT_TEF_AGENT_TOKEN:-tef-docker-token}
       PAYMENT_TEF_WEBHOOK_SECRET: ${PAYMENT_TEF_WEBHOOK_SECRET:-tef-docker-webhook-secret}
       PAYMENT_TEF_DEFAULT_TERMINAL_ID: ${PAYMENT_TEF_DEFAULT_TERMINAL_ID:-TEF-DOCKER-01}
       PAYMENT_TEF_TIMEOUT_MS: ${PAYMENT_TEF_TIMEOUT_MS:-10000}
+      OUTBOX_POLL_MS: 1000
+      HTTP_TIMEOUT_MS: 10000
+      TZ: ${TZ:-America/Sao_Paulo}
     ports:
-      - "127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-3090}:3090"
+      - "127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-13090}:3090"
     depends_on:
+      mysql:
+        condition: service_healthy
       tef-agent:
         condition: service_healthy
-
-  totem-food:
-    environment:
-      PAYMENT_GATEWAY_API_KEY: ${PAYMENT_TEF_TEST_API_KEY:-tef-test-api-key}
-      PAYMENT_TERMINAL_ID: ${PAYMENT_TEF_DEFAULT_TERMINAL_ID:-TEF-DOCKER-01}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 20s
 
 volumes:
+  tef_test_mysql_data:
   tef_agent_data:
