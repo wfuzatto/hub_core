@@ -12,24 +12,18 @@ services:
     profiles: ["docker-edge"]
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+    ports: ["80:80", "443:443", "443:443/udp"]
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
-    networks:
-      - edge
-      - backend
+    networks: [edge, backend]
     healthcheck:
       test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
       interval: 30s
       timeout: 5s
       retries: 3
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     logging: *default-logging
 
@@ -43,29 +37,22 @@ services:
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       TZ: ${TZ:-America/Sao_Paulo}
-    command:
-      - --character-set-server=utf8mb4
-      - --collation-server=utf8mb4_0900_ai_ci
-    volumes:
-      - mysql_data:/var/lib/mysql
-    expose:
-      - "3306"
-    networks:
-      - backend
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    volumes: ["mysql_data:/var/lib/mysql"]
+    expose: ["3306"]
+    networks: [backend]
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: 10s
       timeout: 5s
       retries: 10
       start_period: 30s
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 1m
     logging: *default-logging
 
   hub-core:
-    build:
-      context: ./services/hub-core
+    build: { context: ./services/hub-core }
     restart: unless-stopped
     init: true
     env_file: .env
@@ -77,27 +64,22 @@ services:
       DB_USERNAME: ${MYSQL_USER}
       DB_PASSWORD: ${MYSQL_PASSWORD}
       TZ: ${TZ:-America/Sao_Paulo}
-    expose:
-      - "80"
+    expose: ["80"]
     depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - backend
+      mysql: { condition: service_healthy }
+    networks: [backend]
     healthcheck:
       test: ["CMD", "php", "-r", "$$c=@file_get_contents('http://127.0.0.1/health.php'); exit($$c===false?1:0);"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     logging: *default-logging
 
   pms:
-    build:
-      context: ./modules/hotelaria
+    build: { context: ./modules/hotelaria }
     restart: unless-stopped
     init: true
     environment:
@@ -107,27 +89,29 @@ services:
       DB_NAME: ${PMS_DB_NAME:?configure PMS_DB_NAME in .env}
       DB_USER: ${PMS_DB_USER:?configure PMS_DB_USER in .env}
       DB_PASS: ${PMS_DB_PASSWORD:?configure PMS_DB_PASSWORD in .env}
+      PAYMENT_GATEWAY_URL: http://api-payment:3090
+      PAYMENT_GATEWAY_API_KEY: ${PAYMENT_API_KEY}
+      PAYMENT_GATEWAY_TIMEOUT_MS: ${PAYMENT_HTTP_TIMEOUT_MS:-15000}
+      PAYMENT_GATEWAY_WAIT_MS: ${PAYMENT_UI_WAIT_MS:-90000}
+      PAYMENT_GATEWAY_POLL_MS: ${PAYMENT_UI_POLL_MS:-750}
       TZ: ${TZ:-America/Sao_Paulo}
-    volumes:
-      - pms_storage:/var/www/html/storage
-    expose:
-      - "80"
-    networks:
-      - backend
+    volumes: ["pms_storage:/var/www/html/storage"]
+    expose: ["80"]
+    depends_on:
+      api-payment: { condition: service_healthy }
+    networks: [backend]
     healthcheck:
       test: ["CMD", "php", "-r", "$$c=@file_get_contents('http://127.0.0.1/health.php'); exit($$c===false?1:0);"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     logging: *default-logging
 
   totem-api:
-    build:
-      context: ./modules/totem_autoatendimento
+    build: { context: ./modules/totem_autoatendimento }
     restart: unless-stopped
     init: true
     environment:
@@ -143,21 +127,24 @@ services:
       FACE_SCANNER_API_KEY: ${FACE_SCANNER_API_KEY}
       PAYMENT_GATEWAY_URL: http://api-payment:3090
       PAYMENT_GATEWAY_API_KEY: ${PAYMENT_API_KEY}
+      PAYMENT_GATEWAY_TIMEOUT_MS: ${PAYMENT_HTTP_TIMEOUT_MS:-15000}
+      PAYMENT_UI_WAIT_MS: ${PAYMENT_UI_WAIT_MS:-90000}
+      PAYMENT_UI_POLL_MS: ${PAYMENT_UI_POLL_MS:-750}
+      PAYMENT_MERCHANT_ID: ${TOTEM_PAYMENT_MERCHANT_ID:-totem_hotel}
+      PAYMENT_TERMINAL_ID: ${TOTEM_PAYMENT_TERMINAL_ID:-totem-hotel-01}
       TZ: ${TZ:-America/Sao_Paulo}
-    volumes:
-      - totem_data:/app/data
-    expose:
-      - "3080"
-    networks:
-      - backend
+    volumes: ["totem_data:/app/data"]
+    expose: ["3080"]
+    depends_on:
+      api-payment: { condition: service_healthy }
+    networks: [backend]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     logging: *default-logging
 
@@ -166,25 +153,22 @@ services:
     restart: "no"
     env_file: .env
     depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - backend
+      mysql: { condition: service_healthy }
+    networks: [backend]
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
         mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS totem_food CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL PRIVILEGES ON totem_food.* TO '$$MYSQL_USER'@'%'; FLUSH PRIVILEGES;"
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     logging: *default-logging
 
   totem-food:
-    build:
-      context: ./modules/totem_food
+    build: { context: ./modules/totem_food }
     restart: unless-stopped
     init: true
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --require=/app/src/payment-sync-worker.js
       PORT: 3088
       DB_HOST: mysql
       DB_PORT: 3306
@@ -196,9 +180,11 @@ services:
       KDS_USER: kds
       KDS_PASSWORD: ${TOTEM_ADMIN_PASSWORD}
       INTEGRATION_KEY: ${FACE_SCANNER_API_KEY}
-      PAYMENT_PROVIDER: ${TOTEM_FOOD_PAYMENT_PROVIDER:-mock}
+      PAYMENT_PROVIDER: api_pagamento
       PAYMENT_GATEWAY_URL: http://api-payment:3090
       PAYMENT_GATEWAY_API_KEY: ${PAYMENT_API_KEY}
+      PAYMENT_GATEWAY_TIMEOUT_MS: ${PAYMENT_HTTP_TIMEOUT_MS:-15000}
+      PAYMENT_SYNC_INTERVAL_MS: ${TOTEM_FOOD_PAYMENT_SYNC_INTERVAL_MS:-1000}
       FISCAL_PROVIDER: ${TOTEM_FOOD_FISCAL_PROVIDER:-mock}
       FISCAL_PROVIDER_URL: ${TOTEM_FOOD_FISCAL_PROVIDER_URL:-}
       FISCAL_PROVIDER_TOKEN: ${TOTEM_FOOD_FISCAL_PROVIDER_TOKEN:-}
@@ -207,27 +193,20 @@ services:
       STORE_NAME: ${TOTEM_FOOD_STORE_NAME:-Totem Food}
       STORE_TAX_ID: ${TOTEM_FOOD_STORE_TAX_ID:-}
       TZ: ${TZ:-America/Sao_Paulo}
-    volumes:
-      - totem_food_uploads:/app/data/uploads
-    expose:
-      - "3088"
+    volumes: ["totem_food_uploads:/app/data/uploads"]
+    expose: ["3088"]
     depends_on:
-      mysql:
-        condition: service_healthy
-      totem-food-db-init:
-        condition: service_completed_successfully
-      api-payment:
-        condition: service_healthy
-    networks:
-      - backend
+      mysql: { condition: service_healthy }
+      totem-food-db-init: { condition: service_completed_successfully }
+      api-payment: { condition: service_healthy }
+    networks: [backend]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3088/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     logging: *default-logging
 
@@ -236,21 +215,17 @@ services:
     restart: "no"
     env_file: .env
     depends_on:
-      mysql:
-        condition: service_healthy
-    networks:
-      - backend
+      mysql: { condition: service_healthy }
+    networks: [backend]
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
         mysql -h mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS api_pagamento CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL PRIVILEGES ON api_pagamento.* TO '$$MYSQL_USER'@'%'; FLUSH PRIVILEGES;"
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     logging: *default-logging
 
   api-payment:
-    build:
-      context: ./modules/api_pagamento
+    build: { context: ./modules/api_pagamento }
     restart: unless-stopped
     init: true
     environment:
@@ -266,6 +241,11 @@ services:
       PAYMENT_PROVIDER_PIX: ${PAYMENT_PROVIDER_PIX:-mock}
       PAYMENT_PROVIDER_DEBIT: ${PAYMENT_PROVIDER_DEBIT:-mock}
       PAYMENT_PROVIDER_CREDIT: ${PAYMENT_PROVIDER_CREDIT:-mock}
+      PAYMENT_JOB_POLL_MS: ${PAYMENT_JOB_POLL_MS:-250}
+      PAYMENT_JOB_CONCURRENCY: ${PAYMENT_JOB_CONCURRENCY:-8}
+      PAYMENT_JOB_MAX_ATTEMPTS: ${PAYMENT_JOB_MAX_ATTEMPTS:-12}
+      PAYMENT_JOB_STALE_SECONDS: ${PAYMENT_JOB_STALE_SECONDS:-120}
+      PAYMENT_JOB_MAX_BACKOFF_SECONDS: ${PAYMENT_JOB_MAX_BACKOFF_SECONDS:-300}
       PAYMENT_MOCK_AUTO_APPROVE: ${PAYMENT_MOCK_AUTO_APPROVE:-true}
       PAYMENT_MOCK_WEBHOOK_SECRET: ${PAYMENT_MOCK_WEBHOOK_SECRET:-}
       PAYMENT_GETNET_BRIDGE_URL: ${PAYMENT_GETNET_BRIDGE_URL:-}
@@ -283,29 +263,23 @@ services:
       OUTBOX_MAX_ATTEMPTS: ${PAYMENT_OUTBOX_MAX_ATTEMPTS:-20}
       HTTP_TIMEOUT_MS: ${PAYMENT_HTTP_TIMEOUT_MS:-15000}
       TZ: ${TZ:-America/Sao_Paulo}
-    expose:
-      - "3090"
+    expose: ["3090"]
     depends_on:
-      mysql:
-        condition: service_healthy
-      api-payment-db-init:
-        condition: service_completed_successfully
-    networks:
-      - backend
+      mysql: { condition: service_healthy }
+      api-payment-db-init: { condition: service_completed_successfully }
+    networks: [backend]
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     logging: *default-logging
 
   face-scanner:
-    build:
-      context: ./modules/face_scanner
+    build: { context: ./modules/face_scanner }
     restart: unless-stopped
     init: true
     environment:
@@ -319,20 +293,16 @@ services:
       ALLOWED_ORIGINS: https://${TOTEM_DOMAIN}
       DEBUG_STORE_IMAGES: "false"
       TZ: ${TZ:-America/Sao_Paulo}
-    volumes:
-      - face_scanner_data:/app/data
-    expose:
-      - "8091"
-    networks:
-      - backend
+    volumes: ["face_scanner_data:/app/data"]
+    expose: ["8091"]
+    networks: [backend]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/api/v1/health', timeout=4)"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
-    security_opt:
-      - no-new-privileges:true
+    security_opt: ["no-new-privileges:true"]
     stop_grace_period: 30s
     logging: *default-logging
 
@@ -345,10 +315,8 @@ services:
       - pms_storage:/source/pms:ro
       - face_scanner_data:/source/face-scanner:ro
       - totem_food_uploads:/source/totem-food:ro
-    networks:
-      - backend
-    security_opt:
-      - no-new-privileges:true
+    networks: [backend]
+    security_opt: ["no-new-privileges:true"]
     logging: *default-logging
 
 networks:
