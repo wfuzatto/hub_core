@@ -1,0 +1,55 @@
+services:
+  tef-agent:
+    build:
+      context: ./services/tef-agent
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: 8766
+      TEF_DRIVER: mock
+      TEF_TERMINAL_ID: ${PAYMENT_TEF_DEFAULT_TERMINAL_ID:-TEF-DOCKER-01}
+      TEF_DATA_DIR: /app/data
+      TEF_AGENT_TOKEN: ${PAYMENT_TEF_AGENT_TOKEN:-tef-docker-token}
+      TEF_CALLBACK_URL: http://api-payment:3090/api/v1/webhooks/tef
+      TEF_CALLBACK_SECRET: ${PAYMENT_TEF_WEBHOOK_SECRET:-tef-docker-webhook-secret}
+      TEF_CALLBACK_TIMEOUT_MS: ${PAYMENT_TEF_CALLBACK_TIMEOUT_MS:-5000}
+      TEF_MOCK_CARD_DELAY_MS: ${TEF_MOCK_CARD_DELAY_MS:-800}
+      TEF_MOCK_PIN_DELAY_MS: ${TEF_MOCK_PIN_DELAY_MS:-800}
+      TEF_MOCK_AUTHORIZE_DELAY_MS: ${TEF_MOCK_AUTHORIZE_DELAY_MS:-800}
+      TEF_MOCK_DECISION: ${TEF_MOCK_DECISION:-approve}
+    volumes:
+      - tef_agent_data:/app/data
+    ports:
+      - "127.0.0.1:${TEF_AGENT_LOCAL_PORT:-8766}:8766"
+    networks: [backend]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8766/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 10s
+
+  api-payment:
+    environment:
+      PAYMENT_PROVIDER_DEBIT: tef
+      PAYMENT_PROVIDER_CREDIT: tef
+      PAYMENT_TEF_AGENT_URL: http://tef-agent:8766
+      PAYMENT_TEF_AGENT_TOKEN: ${PAYMENT_TEF_AGENT_TOKEN:-tef-docker-token}
+      PAYMENT_TEF_WEBHOOK_SECRET: ${PAYMENT_TEF_WEBHOOK_SECRET:-tef-docker-webhook-secret}
+      PAYMENT_TEF_DEFAULT_TERMINAL_ID: ${PAYMENT_TEF_DEFAULT_TERMINAL_ID:-TEF-DOCKER-01}
+      PAYMENT_TEF_TIMEOUT_MS: ${PAYMENT_TEF_TIMEOUT_MS:-10000}
+    ports:
+      - "127.0.0.1:${PAYMENT_TEF_TEST_LOCAL_PORT:-3090}:3090"
+    depends_on:
+      tef-agent:
+        condition: service_healthy
+
+  totem-food:
+    environment:
+      PAYMENT_TERMINAL_ID: ${PAYMENT_TEF_DEFAULT_TERMINAL_ID:-TEF-DOCKER-01}
+
+volumes:
+  tef_agent_data:
