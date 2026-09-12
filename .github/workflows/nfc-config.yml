@@ -9,6 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - run: python3 -m unittest discover -s tests -p 'test_nfc_config.py'
       - run: bash -n scripts/update_module.sh scripts/preflight.sh scripts/update_docker.sh
+      - run: cp .env.example .env
       - name: Validate effective Compose configuration without printing secrets
         env:
           HOTEL_CARD_PROVIDER: bis_api
