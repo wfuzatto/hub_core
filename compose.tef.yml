@@ -1,0 +1,12 @@
+# Override opcional para integração com tef_agent NATIVO no computador do PIN pad.
+# O hardware PPC930 não é passado ao Docker.
+services:
+  api-payment:
+    environment:
+      TEF_AGENT_URL: ${TEF_AGENT_URL:-}
+      TEF_AGENT_TOKEN: ${TEF_AGENT_TOKEN:-}
+      TEF_AGENT_TIMEOUT_MS: ${TEF_AGENT_TIMEOUT_MS:-5000}
+      # Providers continuam definidos no compose principal/.env. Não forçar TEF aqui.
+  totem-food:
+    environment:
+      TEF_TERMINAL_ID: ${TEF_DEFAULT_TERMINAL_ID:-PPC930-FOOD-01}
