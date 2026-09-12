@@ -4,6 +4,7 @@ offline-bundles/
 modules/*
 !modules/modules.list
 !modules/.gitkeep
+.tef-test/
 *.log
 .DS_Store
 __pycache__/
