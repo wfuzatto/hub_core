@@ -1,11 +1,30 @@
 #!/usr/bin/env python3
 import json, os, sys, urllib.request
+from pathlib import Path
 
-enabled=str(os.getenv('TEF_ENABLED','false')).lower() in ('1','true','yes','on')
+
+def load_env_file(path='.env'):
+    values={}
+    p=Path(path)
+    if not p.exists(): return values
+    for raw in p.read_text(encoding='utf-8',errors='replace').splitlines():
+        line=raw.strip()
+        if not line or line.startswith('#') or '=' not in line: continue
+        key,value=line.split('=',1)
+        key=key.strip(); value=value.strip()
+        if len(value)>=2 and value[0]==value[-1] and value[0] in ('"',"'"): value=value[1:-1]
+        values[key]=value
+    return values
+
+file_env=load_env_file()
+def cfg(name, default=''):
+    return os.getenv(name, file_env.get(name, default))
+
+enabled=str(cfg('TEF_ENABLED','false')).lower() in ('1','true','yes','on')
 if not enabled:
     print('TEF................. DISABLED (safe default)')
     raise SystemExit(0)
-url=os.getenv('TEF_AGENT_URL','').rstrip('/'); token=os.getenv('TEF_AGENT_TOKEN',''); terminal=os.getenv('TEF_DEFAULT_TERMINAL_ID','PPC930-FOOD-01')
+url=cfg('TEF_AGENT_URL','').rstrip('/'); token=cfg('TEF_AGENT_TOKEN',''); terminal=cfg('TEF_DEFAULT_TERMINAL_ID','PPC930-FOOD-01')
 if not url or not token:
     print('TEF preflight: TEF_AGENT_URL/TEF_AGENT_TOKEN ausentes',file=sys.stderr); raise SystemExit(2)
 def get(path,auth=False):
