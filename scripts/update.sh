@@ -26,6 +26,10 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+HOTEL_CARD_PROVIDER_VALUE="$(grep -E '^HOTEL_CARD_PROVIDER=' .env | tail -1 | cut -d= -f2- || true)"
+HOTEL_CARD_PROVIDER_VALUE="${HOTEL_CARD_PROVIDER_VALUE:-mock}"
+BIS_API_URL_VALUE="$(grep -E '^BIS_API_URL=' .env | tail -1 | cut -d= -f2- || true)"
+
 if [[ "$SKIP_PULL" -eq 0 ]]; then
   if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
     echo "ERRO: hub_core possui alterações locais em arquivos versionados."
@@ -56,7 +60,7 @@ if [[ "$SKIP_PULL" -eq 0 ]]; then
   fi
 fi
 
-echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU face=internal-sface nfc=${HOTEL_CARD_PROVIDER:-mock}"
+echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU face=internal-sface nfc=$HOTEL_CARD_PROVIDER_VALUE"
 
 echo "[modules] preparando versões aprovadas..."
 bash scripts/bootstrap.sh
@@ -153,7 +157,11 @@ if [[ "$EDGE_MODE" == "host" ]]; then
   echo "Totem Food:    http://${TOTEM_FOOD_LOCAL_BIND:-127.0.0.1}:${TOTEM_FOOD_LOCAL_PORT:-3085} (somente host)"
   echo "API Pagamento: http://${PAYMENT_LOCAL_BIND:-127.0.0.1}:${PAYMENT_LOCAL_PORT:-3086} (somente host)"
   echo "Face Scanner:  internal SFace + thresholds homologados em face-scanner:8091"
-  echo "NFC Hotel:     ${HOTEL_CARD_PROVIDER:-mock}${BIS_API_URL:+ -> $BIS_API_URL}"
+  if [[ "$HOTEL_CARD_PROVIDER_VALUE" == "bis_api" ]]; then
+    echo "NFC Hotel:     bis_api -> ${BIS_API_URL_VALUE:-nao-configurado}"
+  else
+    echo "NFC Hotel:     $HOTEL_CARD_PROVIDER_VALUE"
+  fi
 fi
 
 echo "Atualização Docker concluída com sucesso."
