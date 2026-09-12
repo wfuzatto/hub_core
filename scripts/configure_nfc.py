@@ -150,6 +150,8 @@ def main():
     parser.add_argument('--apply', action='store_true', help='Run the isolated Totem update after persistence and validation')
     args = parser.parse_args()
     secret = sys.stdin.readline().rstrip('\r\n') if args.confirmation_stdin else getpass.getpass('BisApi.RequireWriteChallenge (não é o HPASS): ')
+    if len(secret) != 6:
+        raise ValueError('O RequireWriteChallenge desta instalação deve ter exatamente 6 caracteres.')
     values = dict(HOTEL_CARD_PROVIDER='bis_api', BIS_API_URL=args.url, BIS_API_WRITE_CONFIRMATION=secret,
                   BIS_API_TIMEOUT_MS='15000', HOTEL_ACCESS_CHECKIN_TIME=args.checkin,
                   HOTEL_ACCESS_CHECKOUT_TIME=args.checkout, HOTEL_ACCESS_UTC_OFFSET=args.offset)

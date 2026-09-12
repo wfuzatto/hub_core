@@ -13,7 +13,7 @@ from configure_nfc import apply_update, parse_dotenv, persist_configuration, saf
 
 
 class ConfigureNfcTest(unittest.TestCase):
-    def values(self, secret='NEW$CHALLENGE6'):
+    def values(self, secret='N6$#a!'):
         return {
             'HOTEL_CARD_PROVIDER': 'bis_api',
             'BIS_API_URL': 'http://192.0.2.20:8765',
@@ -28,7 +28,7 @@ class ConfigureNfcTest(unittest.TestCase):
         old = "PAYMENT_API_KEY='payment'\nBIS_API_WRITE_CONFIRMATION='OLDVALUE'\nBIS_API_WRITE_CONFIRMATION='DUPLICATE'\nFACE_SCANNER_API_KEY='face'\n"
         new = updated_text(old, self.values())
         parsed = parse_dotenv(new)
-        self.assertEqual(parsed['BIS_API_WRITE_CONFIRMATION'], 'NEW$CHALLENGE6')
+        self.assertEqual(parsed['BIS_API_WRITE_CONFIRMATION'], 'N6$#a!')
         self.assertNotIn('OLDVALUE', new)
         self.assertNotIn('DUPLICATE', new)
         self.assertEqual(parsed['PAYMENT_API_KEY'], 'payment')
@@ -44,7 +44,7 @@ class ConfigureNfcTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); target = root / '.env'; target.write_text("PAYMENT_API_KEY='same'\nBIS_API_WRITE_CONFIRMATION='OLD'\n", encoding='utf-8'); os.chmod(target, 0o600)
             backup = persist_configuration(target, self.values(), root / 'backups')
-            self.assertEqual(parse_dotenv(target.read_text())['BIS_API_WRITE_CONFIRMATION'], 'NEW$CHALLENGE6')
+            self.assertEqual(parse_dotenv(target.read_text())['BIS_API_WRITE_CONFIRMATION'], 'N6$#a!')
             self.assertEqual(stat.S_IMODE(target.stat().st_mode) & 0o600, 0o600)
             self.assertEqual(stat.S_IMODE(backup.stat().st_mode) & 0o600, 0o600)
             self.assertEqual(parse_dotenv(backup.read_text())['BIS_API_WRITE_CONFIRMATION'], 'OLD')
