@@ -42,7 +42,7 @@ if [[ "$SKIP_PULL" -eq 0 ]]; then
   if ! git merge-base --is-ancestor "$local_sha" "$remote_sha"; then
     echo "ERRO: o checkout local divergiu de origin/main. Atualização automática abortada."
     echo "local=$local_sha"
-    echo "origin/main=$remote_sha"
+    echo "origin/main=$REMOTE_SHA"
     exit 1
   fi
 
@@ -56,7 +56,7 @@ if [[ "$SKIP_PULL" -eq 0 ]]; then
   fi
 fi
 
-echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU face=internal-sface"
+echo "[mode] edge=$EDGE_MODE gpu=$USE_GPU face=internal-sface nfc=${HOTEL_CARD_PROVIDER:-mock}"
 
 echo "[modules] preparando versões aprovadas..."
 bash scripts/bootstrap.sh
@@ -80,6 +80,7 @@ else
   COMPOSE+=( --profile docker-edge )
 fi
 COMPOSE+=( -f compose.face-real-test.yml )
+COMPOSE+=( -f compose.nfc-bis.yml )
 if [[ "$USE_GPU" == "1" ]]; then
   echo "[gpu] override NVIDIA habilitado"
   COMPOSE+=( -f compose.gpu.yml )
@@ -152,6 +153,7 @@ if [[ "$EDGE_MODE" == "host" ]]; then
   echo "Totem Food:    http://${TOTEM_FOOD_LOCAL_BIND:-127.0.0.1}:${TOTEM_FOOD_LOCAL_PORT:-3085} (somente host)"
   echo "API Pagamento: http://${PAYMENT_LOCAL_BIND:-127.0.0.1}:${PAYMENT_LOCAL_PORT:-3086} (somente host)"
   echo "Face Scanner:  internal SFace + thresholds homologados em face-scanner:8091"
+  echo "NFC Hotel:     ${HOTEL_CARD_PROVIDER:-mock}${BIS_API_URL:+ -> $BIS_API_URL}"
 fi
 
 echo "Atualização Docker concluída com sucesso."
