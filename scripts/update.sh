@@ -42,7 +42,7 @@ if [[ "$SKIP_PULL" -eq 0 ]]; then
   if ! git merge-base --is-ancestor "$local_sha" "$remote_sha"; then
     echo "ERRO: o checkout local divergiu de origin/main. Atualização automática abortada."
     echo "local=$local_sha"
-    echo "origin/main=$REMOTE_SHA"
+    echo "origin/main=$remote_sha"
     exit 1
   fi
 
