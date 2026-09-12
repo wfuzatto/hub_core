@@ -1,0 +1,52 @@
+name: TEF Docker V1
+
+on:
+  push:
+    branches:
+      - feature/tef-docker-v1
+    paths:
+      - 'services/tef-agent/**'
+      - 'compose.tef-test.yml'
+      - 'scripts/test_tef_docker.sh'
+      - 'modules/modules.list'
+      - '.github/workflows/tef-docker.yml'
+  pull_request:
+    paths:
+      - 'services/tef-agent/**'
+      - 'compose.tef-test.yml'
+      - 'scripts/test_tef_docker.sh'
+      - 'modules/modules.list'
+      - '.github/workflows/tef-docker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-tef:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout HUB
+        uses: actions/checkout@v4
+
+      - name: Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Run isolated TEF lab
+        run: |
+          chmod +x scripts/test_tef_docker.sh
+          bash scripts/test_tef_docker.sh
+
+      - name: Show lab status on failure
+        if: failure()
+        run: |
+          docker compose -p hub_core_tef_test -f compose.tef-test.yml ps || true
+          docker compose -p hub_core_tef_test -f compose.tef-test.yml logs --tail=250 || true
+
+      - name: Clean isolated lab
+        if: always()
+        run: |
+          docker compose -p hub_core_tef_test -f compose.tef-test.yml down -v --remove-orphans || true
